@@ -144,6 +144,58 @@ async def health():
     conn.close()
     return {"status":"ok","total_alerts":count,"port":PORT}
 
+# ── Gold Price Proxy (เลี่ยง CORS) ──────────────────
+import urllib.request
+import time
+
+_price_cache = {"price": 0, "ts": 0, "candles": []}
+
+@app.get("/price")
+async def get_price():
+    """ดึงราคาทอง — ลองหลาย source ตามลำดับ"""
+    now = time.time()
+    if now - _price_cache["ts"] < 8 and _price_cache["price"] > 0:
+        return {"price": _price_cache["price"], "candles": _price_cache["candles"], "cached": True}
+
+    price = 0
+    sources = [
+        # Binance PAXG/USDT (ทอง tokenized ≈ XAU spot) — เสถียร เปิด CORS
+        ("https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT", lambda d: float(d["price"])),
+        # gold-api.com (สำรอง)
+        ("https://api.gold-api.com/price/XAU", lambda d: float(d.get("price", 0))),
+    ]
+
+    for url, extract in sources:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = json.loads(r.read().decode())
+            price = extract(data)
+            if price > 0:
+                break
+        except Exception:
+            continue
+
+    if price <= 0:
+        return {"price": _price_cache.get("price", 0), "candles": _price_cache.get("candles", []), "error": "all sources failed"}
+
+    # rolling candles จากราคาจริง
+    candles = _price_cache.get("candles", [])
+    if not candles:
+        candles = []
+        for i in range(5):
+            o = price + (i - 2) * 0.3
+            c = o + ((-1) ** i) * 0.4
+            candles.append({"o": round(o,2), "h": round(max(o,c)+0.2,2), "l": round(min(o,c)-0.2,2), "c": round(c,2)})
+    else:
+        last_c = candles[-1]["c"]
+        o, c = last_c, price
+        candles.append({"o": round(o,2), "h": round(max(o,c)+0.2,2), "l": round(min(o,c)-0.2,2), "c": round(c,2)})
+        candles = candles[-5:]
+
+    _price_cache.update({"price": price, "ts": now, "candles": candles})
+    return {"price": price, "candles": candles, "cached": False}
+
 # WebSocket (เก็บไว้เผื่อ platform อื่นรองรับ)
 class CM:
     def __init__(self): self.active=[]

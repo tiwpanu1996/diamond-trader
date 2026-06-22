@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DIAMOND TRADER — XAUUSDm</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
   :root {
     --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
     --green:#3fb950; --red:#f85149; --yellow:#e3b341;
@@ -16,22 +16,20 @@
   body {
     background:var(--bg); color:var(--white);
     font-family:'JetBrains Mono','Courier New',monospace; font-size:12px;
-    height:100vh; display:grid;
-    grid-template-rows:44px 1fr; grid-template-columns:1fr 300px;
-    overflow:hidden;
-    max-width:100vw;
+    min-height:100vh; display:flex; flex-direction:column;
   }
 
   /* TOPBAR */
   #topbar {
-    grid-column:1/-1; background:var(--bg2); border-bottom:1px solid var(--border);
-    display:flex; align-items:center; padding:0 16px; gap:16px;
+    height:42px; background:var(--bg2); border-bottom:1px solid var(--border);
+    display:flex; align-items:center; padding:0 16px; gap:14px; flex-shrink:0;
   }
   #topbar .logo { color:var(--blue); font-weight:700; font-size:14px; letter-spacing:2px; }
   #ws-dot { width:8px; height:8px; border-radius:50%; background:var(--red); transition:.3s; }
   #ws-dot.live { background:var(--green); box-shadow:0 0 8px var(--green); }
   #ws-status { color:var(--gray); font-size:11px; }
-  #price-display { margin-left:auto; color:var(--yellow); font-size:18px; font-weight:700; letter-spacing:1px; }
+  #price-display { margin-left:auto; color:var(--yellow); font-size:18px; font-weight:700; }
+  #price-chg { font-size:11px; margin-left:4px; }
   #sound-toggle {
     background:var(--bg3); border:1px solid var(--border); color:var(--gray);
     padding:4px 10px; border-radius:5px; cursor:pointer; font-size:11px; font-family:inherit;
@@ -39,108 +37,84 @@
   #sound-toggle.on { color:var(--green); border-color:var(--green); }
   #clock { color:var(--gray); font-size:11px; }
 
-  /* MAIN GRID */
+  /* ── GRID 9 TF (บน) ── */
   #main-grid {
-    padding:10px; display:grid;
-    grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
-    gap:8px; overflow:hidden;
+    padding:8px; display:grid;
+    grid-template-columns:repeat(3,1fr); gap:6px;
+    flex:1;
   }
   .tf-panel {
-    background:var(--bg2); border:1px solid var(--border); border-radius:8px;
-    padding:10px 12px; display:flex; flex-direction:column; position:relative; overflow:hidden;
+    background:var(--bg2); border:1px solid var(--border); border-radius:7px;
+    padding:7px 9px; display:flex; flex-direction:column; position:relative;
+    overflow:hidden; min-height:120px;
   }
-  .tf-panel.active-buy  { border-color:var(--green); box-shadow:0 0 12px rgba(63,185,80,.25); }
-  .tf-panel.active-sell { border-color:var(--red);   box-shadow:0 0 12px rgba(248,81,73,.25); }
+  .tf-panel.active-buy  { border-color:var(--green); box-shadow:0 0 10px rgba(63,185,80,.2); }
+  .tf-panel.active-sell { border-color:var(--red);   box-shadow:0 0 10px rgba(248,81,73,.2); }
+  .tf-head { display:flex; justify-content:space-between; align-items:center; }
   .tf-label { font-size:10px; font-weight:700; color:var(--gray); letter-spacing:1px; }
-  .tf-pattern { font-size:13px; font-weight:700; margin:2px 0; }
-  .tf-pattern.buy { color:var(--green); } .tf-pattern.sell { color:var(--red); } .tf-pattern.wait { color:var(--gray); }
-  .tf-verdict {
-    position:absolute; top:10px; right:12px; font-size:10px;
-    padding:2px 8px; border-radius:4px; font-weight:700; letter-spacing:1px;
-  }
+  .tf-verdict { font-size:9px; padding:2px 7px; border-radius:4px; font-weight:700; letter-spacing:1px; }
   .verdict-READY{background:var(--ready);color:#fff;} .verdict-WAIT{background:var(--wait);color:#fff;}
   .verdict-NO-TRADE{background:var(--notrade);color:#fff;} .verdict-default{background:var(--bg3);color:var(--gray);}
-
-  /* candle chart */
-  .tf-chart { flex:1; margin:6px 0; min-height:40px; }
-  .tf-chart svg { width:100%; height:100%; }
-
-  .tf-footer { display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--gray); margin-top:auto; }
-  .tf-cf { color:var(--gray); }
+  .tf-pattern { font-size:12px; font-weight:700; margin:3px 0; }
+  .tf-pattern.buy{color:var(--green);} .tf-pattern.sell{color:var(--red);} .tf-pattern.wait{color:var(--gray);}
+  .tf-chart { flex:1; margin:4px 0; min-height:50px; }
+  .tf-chart svg { width:100%; height:100%; display:block; }
+  .tf-footer { display:flex; justify-content:space-between; font-size:9px; color:var(--gray); }
   .tf-cf.ready { color:var(--green); }
-  .tf-grid-line { position:absolute; bottom:0; left:0; right:0; height:3px; }
-  .gl-green{background:var(--green);} .gl-yellow{background:var(--yellow);}
-  .gl-red{background:var(--red);} .gl-gray{background:var(--bg3);}
+  .tf-grid-line { position:absolute; bottom:0; left:0; right:0; height:2px; }
+  .gl-green{background:var(--green);} .gl-red{background:var(--red);} .gl-gray{background:var(--bg3);}
 
-  /* SIDEBAR */
-  #sidebar {
-    background:var(--bg2); border-left:1px solid var(--border);
-    display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;
-    width:300px; min-width:300px; max-width:300px;
+  /* ── FILTER BAR (ล่าง) ── */
+  #filter-bar {
+    background:var(--bg2); border-top:1px solid var(--border);
+    display:grid; grid-template-columns:1.4fr 1fr 1.2fr 1.4fr; gap:1px;
+    flex-shrink:0;
   }
-  .s-section { border-bottom:1px solid var(--border); padding:12px; width:100%; }
-  .s-title { font-size:10px; font-weight:700; color:var(--gray); letter-spacing:2px; margin-bottom:10px; }
+  .fb-col { padding:8px 12px; background:var(--bg2); }
+  .fb-title { font-size:9px; font-weight:700; color:var(--gray); letter-spacing:1.5px; margin-bottom:6px; }
+  .fb-row { display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; }
+  .fb-label{color:var(--gray);} .fb-val{font-weight:600;}
+  .fb-val.buy{color:var(--green);} .fb-val.sell{color:var(--red);}
+  .fb-val.ok{color:var(--green);} .fb-val.warn{color:var(--yellow);} .fb-val.bad{color:var(--red);}
 
   #verdict-box {
-    text-align:center; padding:10px; border-radius:6px; font-size:18px; font-weight:700;
-    letter-spacing:3px; margin-bottom:12px; background:var(--bg3); color:var(--gray); transition:.3s;
+    text-align:center; padding:6px; border-radius:5px; font-size:16px; font-weight:700;
+    letter-spacing:2px; margin-bottom:6px; background:var(--bg3); color:var(--gray);
   }
   #verdict-box.READY{background:var(--ready);color:#fff;} #verdict-box.WAIT{background:var(--wait);color:#fff;}
   #verdict-box.NO-TRADE{background:var(--notrade);color:#fff;}
 
-  .exec-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:11px; gap:4px; }
-  .exec-label { color:var(--gray); white-space:nowrap; } .exec-val { color:var(--white); font-weight:600; white-space:nowrap; text-align:right; }
-  .exec-val.buy{color:var(--green);} .exec-val.sell{color:var(--red);}
-  .exec-val.ok{color:var(--green);} .exec-val.warn{color:var(--yellow);} .exec-val.bad{color:var(--red);}
+  #ovl-bar-wrap{background:var(--bg3);border-radius:3px;height:5px;margin-top:3px;overflow:hidden;}
+  #ovl-bar{height:100%;border-radius:3px;transition:.4s;width:0%;background:var(--green);}
 
-  #ovl-bar-wrap { background:var(--bg3); border-radius:4px; height:6px; margin-top:4px; overflow:hidden; }
-  #ovl-bar { height:100%; border-radius:4px; transition:.4s; width:0%; background:var(--green); }
-
-  /* Sideway badge */
-  #sideway-box {
-    text-align:center; padding:6px; border-radius:5px; font-size:11px; font-weight:700;
-    background:var(--bg3); color:var(--gray); margin-top:8px;
-  }
-  #sideway-box.box{background:#1a2f1a;color:var(--green);}
-  #sideway-box.wide{background:var(--notrade);color:#fff;}
+  #sideway-box{text-align:center;padding:5px;border-radius:5px;font-size:10px;font-weight:700;background:var(--bg3);color:var(--gray);margin-top:5px;}
+  #sideway-box.box{background:#1a2f1a;color:var(--green);} #sideway-box.wide{background:var(--notrade);color:#fff;}
   #sideway-box.tri{background:#3a2f0a;color:var(--yellow);}
 
-  .mtf-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:5px; }
-  .mtf-tf { width:32px; color:var(--gray); font-size:10px; }
-  .mtf-bar-wrap { flex:1; height:4px; background:var(--bg3); border-radius:2px; margin:0 8px; overflow:hidden; }
-  .mtf-bar { height:100%; border-radius:2px; width:0%; transition:.4s; }
-  .mtf-pat { width:64px; text-align:right; font-size:9px; color:var(--gray); white-space:nowrap; overflow:hidden; }
+  /* MTF mini */
+  .mtf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;}
+  .mtf-cell{display:flex;align-items:center;gap:4px;font-size:9px;}
+  .mtf-tf{color:var(--gray);width:24px;}
+  .mtf-dot{width:6px;height:6px;border-radius:50%;background:var(--bg3);}
+  .mtf-dot.buy{background:var(--green);} .mtf-dot.sell{background:var(--red);}
+  #score-box{text-align:center;font-size:11px;font-weight:700;margin-top:6px;}
+  #confluence-msg{text-align:center;font-size:9px;margin-top:3px;color:var(--gray);}
+  #confluence-msg.align{color:var(--green);}
 
-  #score-box { text-align:center; padding:8px; background:var(--bg3); border-radius:6px; font-size:12px; font-weight:700; margin-top:8px; }
-  #confluence-msg { text-align:center; font-size:10px; margin-top:6px; color:var(--gray); }
-  #confluence-msg.align { color:var(--green); }
-
-  #alert-list { display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto; }
-  .alert-item {
-    background:var(--bg3); border-radius:6px; padding:7px 10px; border-left:3px solid var(--gray);
-    display:flex; justify-content:space-between; align-items:center; animation:fadeIn .4s ease;
-  }
+  #alert-list{display:flex;flex-direction:column;gap:4px;max-height:90px;overflow-y:auto;}
+  .alert-item{background:var(--bg3);border-radius:5px;padding:5px 8px;border-left:3px solid var(--gray);display:flex;justify-content:space-between;align-items:center;font-size:10px;animation:fadeIn .4s;}
   .alert-item.buy{border-color:var(--green);} .alert-item.sell{border-color:var(--red);}
-  .alert-pat{font-weight:700;font-size:11px;} .alert-pat.buy{color:var(--green);} .alert-pat.sell{color:var(--red);}
-  .alert-time{color:var(--gray);font-size:10px;}
-  .alert-verd{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:700;}
+  .alert-pat{font-weight:700;} .alert-pat.buy{color:var(--green);} .alert-pat.sell{color:var(--red);}
+  .alert-time{color:var(--gray);}
+  .alert-verd{font-size:8px;padding:1px 5px;border-radius:3px;font-weight:700;}
   .av-READY{background:var(--ready);color:#fff;} .av-WAIT{background:var(--wait);color:#fff;} .av-NO-TRADE{background:var(--notrade);color:#fff;}
 
-  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
-  @keyframes flash{0%,100%{box-shadow:0 0 0 transparent;}50%{box-shadow:0 0 20px var(--green);}}
-  .flash-buy{animation:flash .6s ease 2;}
-  ::-webkit-scrollbar{width:6px;height:6px;} ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px;}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  @keyframes flash{0%,100%{box-shadow:0 0 0 transparent;}50%{box-shadow:0 0 18px var(--green);}}
+  .flash-on{animation:flash .6s ease 2;}
+  ::-webkit-scrollbar{width:5px;height:5px;} ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px;}
 
-  /* Responsive — จอแคบลด sidebar */
-  @media (max-width:1400px) {
-    body { grid-template-columns:1fr 270px; }
-    #sidebar { width:270px; min-width:270px; max-width:270px; }
-  }
-  @media (max-width:1100px) {
-    body { grid-template-columns:1fr 240px; }
-    #sidebar { width:240px; min-width:240px; max-width:240px; }
-    .exec-row, .exec-val, .exec-label { font-size:10px; }
-  }
+  @media (max-width:900px){ #filter-bar{grid-template-columns:1fr 1fr;} }
 </style>
 </head>
 <body>
@@ -150,332 +124,274 @@
   <div id="ws-dot"></div>
   <span id="ws-status">OFFLINE</span>
   <button id="sound-toggle" onclick="toggleSound()">🔔 SOUND OFF</button>
-  <span id="price-display">—</span>
+  <span id="price-display">—<span id="price-chg"></span></span>
   <span id="clock">—</span>
 </div>
 
 <div id="main-grid"></div>
 
-<div id="sidebar">
-  <div class="s-section">
-    <div class="s-title">■ EXECUTION</div>
+<div id="filter-bar">
+  <div class="fb-col">
+    <div class="fb-title">■ EXECUTION</div>
     <div id="verdict-box">WAIT</div>
-    <div class="exec-row"><span class="exec-label">ENTRY</span><span id="ex-entry" class="exec-val">—</span></div>
-    <div class="exec-row"><span class="exec-label">SL</span><span id="ex-sl" class="exec-val bad">—</span></div>
-    <div class="exec-row"><span class="exec-label">TP (1:3)</span><span id="ex-tp" class="exec-val ok">—</span></div>
-    <div class="exec-row"><span class="exec-label">PA</span><span id="ex-pa" class="exec-val">—</span></div>
-    <div class="exec-row"><span class="exec-label">CF M5</span><span id="ex-cf" class="exec-val">—</span></div>
-    <div class="exec-row"><span class="exec-label">Spread</span><span id="ex-spread" class="exec-val ok">160 pts ✓</span></div>
-    <div class="exec-row"><span class="exec-label">OVL</span><span id="ex-ovl" class="exec-val">—</span></div>
+    <div class="fb-row"><span class="fb-label">ENTRY</span><span id="ex-entry" class="fb-val">—</span></div>
+    <div class="fb-row"><span class="fb-label">SL</span><span id="ex-sl" class="fb-val bad">—</span></div>
+    <div class="fb-row"><span class="fb-label">TP (1:3)</span><span id="ex-tp" class="fb-val ok">—</span></div>
+    <div class="fb-row"><span class="fb-label">PA</span><span id="ex-pa" class="fb-val">—</span></div>
+  </div>
+
+  <div class="fb-col">
+    <div class="fb-title">■ FILTER STATUS</div>
+    <div class="fb-row"><span class="fb-label">CF M5</span><span id="ex-cf" class="fb-val">—</span></div>
+    <div class="fb-row"><span class="fb-label">Spread</span><span id="ex-spread" class="fb-val ok">160 ✓</span></div>
+    <div class="fb-row"><span class="fb-label">OVL</span><span id="ex-ovl" class="fb-val">—</span></div>
     <div id="ovl-bar-wrap"><div id="ovl-bar"></div></div>
     <div id="sideway-box">SIDEWAY —</div>
   </div>
 
-  <div class="s-section">
-    <div class="s-title">■ MTF BIAS FRAMEWORK</div>
-    <div id="mtf-rows"></div>
+  <div class="fb-col">
+    <div class="fb-title">■ MTF CONFLUENCE</div>
+    <div class="mtf-grid" id="mtf-grid"></div>
     <div id="score-box">Bull 0 / Bear 0</div>
-    <div id="confluence-msg">รอ Confluence</div>
+    <div id="confluence-msg">รอ Align</div>
   </div>
 
-  <div class="s-section" style="flex:1">
-    <div class="s-title">■ RECENT ALERTS</div>
-    <div id="alert-list"><div style="color:var(--gray);font-size:11px">รอสัญญาณ...</div></div>
+  <div class="fb-col">
+    <div class="fb-title">■ RECENT ALERTS</div>
+    <div id="alert-list"><div style="color:var(--gray);font-size:10px">รอสัญญาณ...</div></div>
   </div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════
 const TF_LIST = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
-const MTF_TF  = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
-const MIN_ALIGN = 4   // ต้อง align อย่างน้อย 4 TF
-
-// state ของแต่ละ TF (เก็บ pattern ล่าสุด)
+const MIN_ALIGN = 4
 const tfState = {}
-TF_LIST.forEach(tf => tfState[tf] = { dir:null, pattern:null })
-
+TF_LIST.forEach(tf => tfState[tf] = {dir:null, pattern:null, candles:null})
 let soundOn = false
+let lastPrice = 0
 
-// ═══════════════════════════════════════════════
-// BUILD PANELS
-// ═══════════════════════════════════════════════
+// ── BUILD PANELS ──
 const grid = document.getElementById("main-grid")
 TF_LIST.forEach(tf => {
   grid.innerHTML += `
   <div class="tf-panel" id="panel-${tf}">
-    <div class="tf-label">${tf}</div>
+    <div class="tf-head">
+      <span class="tf-label">${tf}</span>
+      <span id="verdict-${tf}" class="tf-verdict verdict-default">WAIT</span>
+    </div>
     <div class="tf-pattern wait" id="pat-${tf}">— WAIT</div>
-    <div id="verdict-${tf}" class="tf-verdict verdict-default">WAIT</div>
-    <div class="tf-chart" id="chart-${tf}">${miniCandles(tf,'wait')}</div>
+    <div class="tf-chart" id="chart-${tf}"></div>
     <div class="tf-footer">
       <span id="cf-${tf}" class="tf-cf">CF —</span>
-      <span id="ovl-${tf}">OVL —</span>
+      <span id="ovl-${tf}">—</span>
     </div>
     <div class="tf-grid-line gl-gray" id="gl-${tf}"></div>
   </div>`
 })
 
-const mtfDiv = document.getElementById("mtf-rows")
-MTF_TF.forEach(tf => {
-  mtfDiv.innerHTML += `
-  <div class="mtf-row">
-    <span class="mtf-tf">${tf}</span>
-    <div class="mtf-bar-wrap"><div class="mtf-bar" id="mb-${tf}"></div></div>
-    <span class="mtf-pat" id="mp-${tf}">—</span>
-  </div>`
+const mtfGrid = document.getElementById("mtf-grid")
+TF_LIST.forEach(tf => {
+  mtfGrid.innerHTML += `<div class="mtf-cell"><span class="mtf-tf">${tf}</span><span class="mtf-dot" id="md-${tf}"></span></div>`
 })
 
-// ═══════════════════════════════════════════════
-// MINI CANDLE CHART (จำลอง — seed จากชื่อ TF)
-// ═══════════════════════════════════════════════
-function miniCandles(tf, mode) {
-  let seed = tf.split("").reduce((a,c)=>a+c.charCodeAt(0),0)
-  const rnd = () => { seed = (seed*9301+49297)%233280; return seed/233280 }
-  const n = 7, W = 100, H = 40, cw = W/n
+// ── REAL CANDLE CHART (5 แท่งจริงจาก price API) ──
+function drawCandles(tf, candles, signalColor) {
+  if (!candles || candles.length === 0) return ""
+  const n = candles.length, W = 100, H = 50, cw = W / n
+  const all = candles.flatMap(c => [c.h, c.l])
+  const hi = Math.max(...all), lo = Math.min(...all)
+  const range = (hi - lo) || 1
+  const Y = v => H - ((v - lo) / range) * (H - 6) - 3
+
   let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`
-  let y = H/2
-  for (let i=0; i<n; i++) {
-    const up = mode==='buy' ? rnd()>0.35 : mode==='sell' ? rnd()<0.35 : rnd()>0.5
-    const body = 4 + rnd()*8
-    const o = y, c = up ? y-body : y+body
-    y = c + (rnd()-0.5)*4
-    y = Math.max(8, Math.min(H-8, y))
-    const x = i*cw + cw/2
-    const top = Math.min(o,c) - (2+rnd()*3)
-    const bot = Math.max(o,c) + (2+rnd()*3)
+  candles.forEach((c, i) => {
+    const up = c.c >= c.o
     const col = up ? '#3fb950' : '#f85149'
-    svg += `<line x1="${x}" y1="${top}" x2="${x}" y2="${bot}" stroke="${col}" stroke-width="0.6"/>`
-    svg += `<rect x="${x-cw*0.3}" y="${Math.min(o,c)}" width="${cw*0.6}" height="${Math.abs(c-o)||1}" fill="${col}"/>`
-  }
+    const x = i * cw + cw / 2
+    const yo = Y(c.o), yc = Y(c.c), yh = Y(c.h), yl = Y(c.l)
+    svg += `<line x1="${x}" y1="${yh}" x2="${x}" y2="${yl}" stroke="${col}" stroke-width="0.7"/>`
+    const bt = Math.min(yo, yc), bh = Math.abs(yc - yo) || 1
+    svg += `<rect x="${x - cw * 0.32}" y="${bt}" width="${cw * 0.64}" height="${bh}" fill="${col}"/>`
+  })
   svg += `</svg>`
   return svg
 }
 
-// ═══════════════════════════════════════════════
-// SOUND
-// ═══════════════════════════════════════════════
+// ── SOUND ──
 function toggleSound() {
   soundOn = !soundOn
-  const btn = document.getElementById("sound-toggle")
-  btn.textContent = soundOn ? "🔔 SOUND ON" : "🔔 SOUND OFF"
-  btn.className   = soundOn ? "on" : ""
-  if (soundOn) playBeep()  // ทดสอบเสียง + unlock audio
+  const b = document.getElementById("sound-toggle")
+  b.textContent = soundOn ? "🔔 SOUND ON" : "🔔 SOUND OFF"
+  b.className = soundOn ? "on" : ""
+  if (soundOn) playBeep()
 }
-
 function playBeep() {
   if (!soundOn) return
   try {
     const ctx = new (window.AudioContext||window.webkitAudioContext)()
     const o = ctx.createOscillator(), g = ctx.createGain()
     o.connect(g); g.connect(ctx.destination)
-    o.type = "sine"; o.frequency.value = 880
+    o.type="sine"; o.frequency.value=880
     g.gain.setValueAtTime(0.2, ctx.currentTime)
     g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime+0.3)
     o.start(); o.stop(ctx.currentTime+0.3)
-  } catch(e) {}
+  } catch(e){}
 }
 
-// ═══════════════════════════════════════════════
-// CLOCK
-// ═══════════════════════════════════════════════
-function updateClock() {
-  document.getElementById("clock").textContent = new Date().toUTCString().slice(17,25)+" UTC"
-}
+// ── CLOCK ──
+function updateClock(){ document.getElementById("clock").textContent = new Date().toUTCString().slice(17,25)+" UTC" }
 setInterval(updateClock,1000); updateClock()
 
-// ═══════════════════════════════════════════════
-// UPDATE: EXECUTION
-// ═══════════════════════════════════════════════
+// ── PRICE FETCH (5 แท่งจริง) ──
+async function fetchPrice() {
+  try {
+    const res = await fetch("/price")
+    const d = await res.json()
+    if (d.price > 0) {
+      const chg = lastPrice ? d.price - lastPrice : 0
+      const chgEl = document.getElementById("price-chg")
+      chgEl.textContent = chg ? ` ${chg>0?"▲":"▼"}${Math.abs(chg).toFixed(2)}` : ""
+      chgEl.style.color = chg>=0 ? "var(--green)" : "var(--red)"
+      document.getElementById("price-display").firstChild.textContent = d.price.toFixed(2)
+      lastPrice = d.price
+
+      // อัปเดตแท่งเทียนทุก TF (ใช้ candle เดียวกัน แต่ละ TF mode ต่างกัน)
+      if (d.candles && d.candles.length > 0) {
+        TF_LIST.forEach(tf => {
+          if (!tfState[tf].dir) {  // ถ้ายังไม่มี PA → แสดงแท่งจริง
+            document.getElementById(`chart-${tf}`).innerHTML = drawCandles(tf, d.candles)
+          }
+        })
+      }
+    }
+  } catch(e){}
+}
+
+// ── UPDATE EXECUTION ──
 function updateExecution(d) {
   const isBuy = d.direction==="BUY"
-  const verd  = (d.verdict||"WAIT").toUpperCase()
-
+  const verd = (d.verdict||"WAIT").toUpperCase()
   const vbox = document.getElementById("verdict-box")
   vbox.textContent = verd; vbox.className = verd
-
   document.getElementById("ex-entry").textContent = d.entry_price?d.entry_price.toFixed(2):"—"
-  document.getElementById("ex-sl").textContent    = d.sl?d.sl.toFixed(2):"—"
-  document.getElementById("ex-tp").textContent    = d.tp?d.tp.toFixed(2):"—"
-
+  document.getElementById("ex-sl").textContent = d.sl?d.sl.toFixed(2):"—"
+  document.getElementById("ex-tp").textContent = d.tp?d.tp.toFixed(2):"—"
   const paEl = document.getElementById("ex-pa")
   paEl.textContent = `${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}`
-  paEl.className   = "exec-val "+(isBuy?"buy":"sell")
-
-  // CF M5
-  const cf = d.cf_count || 0
+  paEl.className = "fb-val "+(isBuy?"buy":"sell")
+  const cf = d.cf_count||0
   const cfEl = document.getElementById("ex-cf")
-  cfEl.textContent = cf>0 ? `${cf}/3 ${cf>=3?"✓":""}` : "—"
-  cfEl.className   = "exec-val "+(cf>=3?"ok":cf>0?"warn":"")
-
-  if (d.entry_price)
-    document.getElementById("price-display").textContent = d.entry_price.toFixed(2)
-
-  // OVL
-  let dist = d.ovl_pts || (d.grid && d.entry_price ? Math.abs(d.entry_price-d.grid)*100 : 0)
+  cfEl.textContent = cf>0?`${cf}/3 ${cf>=3?"✓":""}`:"—"
+  cfEl.className = "fb-val "+(cf>=3?"ok":cf>0?"warn":"")
+  let dist = d.ovl_pts || (d.grid&&d.entry_price?Math.abs(d.entry_price-d.grid)*100:0)
   if (dist) {
     const pct = Math.min(dist/3,100)
     const bar = document.getElementById("ovl-bar")
     bar.style.width = pct+"%"
     bar.style.background = dist<=150?"var(--green)":dist<=300?"var(--yellow)":"var(--red)"
-    const ovlEl = document.getElementById("ex-ovl")
-    ovlEl.textContent = dist.toFixed(0)+" pts"
-    ovlEl.className = "exec-val "+(dist<=150?"ok":dist<=300?"warn":"bad")
+    const o = document.getElementById("ex-ovl")
+    o.textContent = dist.toFixed(0)+" pts"
+    o.className = "fb-val "+(dist<=150?"ok":dist<=300?"warn":"bad")
   }
-
-  // Sideway
   updateSideway(d.sideway)
 }
-
 function updateSideway(sw) {
   const box = document.getElementById("sideway-box")
-  if (!sw) { box.textContent="SIDEWAY —"; box.className=""; return }
+  if (!sw){box.textContent="SIDEWAY —";box.className="";return}
   const s = sw.toUpperCase()
-  if (s.includes("BOX")||s.includes("EDGE")) { box.textContent="BOX · PLAY EDGES"; box.className="box" }
-  else if (s.includes("WIDE")) { box.textContent="WIDE · NO-TRADE"; box.className="wide" }
-  else if (s.includes("TRI")) { box.textContent="TRIANGLE · WAIT BREAK"; box.className="tri" }
-  else { box.textContent="TREND"; box.className="" }
+  if (s.includes("BOX")||s.includes("EDGE")){box.textContent="BOX·PLAY EDGES";box.className="box"}
+  else if (s.includes("WIDE")){box.textContent="WIDE·NO-TRADE";box.className="wide"}
+  else if (s.includes("TRI")){box.textContent="TRIANGLE·WAIT";box.className="tri"}
+  else {box.textContent="TREND";box.className=""}
 }
 
-// ═══════════════════════════════════════════════
-// UPDATE: TF PANEL
-// ═══════════════════════════════════════════════
+// ── UPDATE TF PANEL ──
 function updateTFPanel(tf, d) {
   const isBuy = d.direction==="BUY"
-  const verd  = (d.verdict||"WAIT").toUpperCase()
+  const verd = (d.verdict||"WAIT").toUpperCase()
   const panel = document.getElementById(`panel-${tf}`)
   if (!panel) return
-
-  panel.className = "tf-panel " + (isBuy?"active-buy":"active-sell")
-
+  panel.className = "tf-panel "+(isBuy?"active-buy":"active-sell")
   const patEl = document.getElementById(`pat-${tf}`)
   patEl.textContent = `${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}`
   patEl.className = "tf-pattern "+(isBuy?"buy":"sell")
-
   const vEl = document.getElementById(`verdict-${tf}`)
   vEl.textContent = verd; vEl.className = "tf-verdict verdict-"+verd.replace(" ","-")
-
-  // candle chart redraw
-  document.getElementById(`chart-${tf}`).innerHTML = miniCandles(tf, isBuy?'buy':'sell')
-
-  // CF
   const cf = d.cf_count||0
   const cfEl = document.getElementById(`cf-${tf}`)
   cfEl.textContent = cf>0?`CF ${cf}/3`:"CF —"
   cfEl.className = "tf-cf "+(cf>=3?"ready":"")
-
   const gl = document.getElementById(`gl-${tf}`)
   gl.className = "tf-grid-line "+(isBuy?"gl-green":"gl-red")
-
   if (d.grid) document.getElementById(`ovl-${tf}`).textContent = `G ${d.grid.toFixed(2)}`
-
-  // flash + sound
-  if (verd==="READY") { panel.classList.add("flash-buy"); setTimeout(()=>panel.classList.remove("flash-buy"),1200); playBeep() }
-
-  tfState[tf] = { dir:d.direction, pattern:d.pattern }
+  if (verd==="READY"){panel.classList.add("flash-on");setTimeout(()=>panel.classList.remove("flash-on"),1200);playBeep()}
+  tfState[tf] = {dir:d.direction, pattern:d.pattern}
 }
 
-// ═══════════════════════════════════════════════
-// UPDATE: MTF BIAS + CONFLUENCE
-// ═══════════════════════════════════════════════
-function updateMTFBias(tf, d) {
-  const isBuy = d.direction==="BUY"
-  const bar = document.getElementById(`mb-${tf}`)
-  if (!bar) return
-  bar.style.width = "100%"
-  bar.style.background = isBuy?"var(--green)":"var(--red)"
-  const mp = document.getElementById(`mp-${tf}`)
-  if (mp) { mp.textContent = d.pattern||"—"; mp.style.color = isBuy?"var(--green)":"var(--red)" }
+// ── MTF ──
+function updateMTF(tf, d) {
+  const dot = document.getElementById(`md-${tf}`)
+  if (!dot) return
+  dot.className = "mtf-dot "+(d.direction==="BUY"?"buy":"sell")
 }
-
 function updateScore() {
   let bull=0, bear=0
-  MTF_TF.forEach(tf => {
-    const bar = document.getElementById(`mb-${tf}`)
-    if (!bar) return
-    if (bar.style.background.includes("green")) bull++
-    else if (bar.style.background.includes("red")) bear++
+  TF_LIST.forEach(tf => {
+    const dot = document.getElementById(`md-${tf}`)
+    if (!dot) return
+    if (dot.className.includes("buy")) bull++
+    else if (dot.className.includes("sell")) bear++
   })
-  document.getElementById("score-box").innerHTML =
-    `<span style="color:var(--green)">Bull ${bull}</span> / <span style="color:var(--red)">Bear ${bear}</span>`
-
-  // Confluence
+  document.getElementById("score-box").innerHTML = `<span style="color:var(--green)">Bull ${bull}</span> / <span style="color:var(--red)">Bear ${bear}</span>`
   const msg = document.getElementById("confluence-msg")
   const dom = Math.max(bull,bear)
-  if (dom >= MIN_ALIGN) {
-    const side = bull>bear ? "BUY" : "SELL"
-    msg.textContent = `✓ CONFLUENCE ${side} (${dom}/${MIN_ALIGN})`
+  if (dom>=MIN_ALIGN){
+    msg.textContent = `✓ CONFLUENCE ${bull>bear?"BUY":"SELL"} (${dom}/${MIN_ALIGN})`
     msg.className = "align"
-  } else {
-    msg.textContent = `รอ Align (${dom}/${MIN_ALIGN})`
-    msg.className = ""
-  }
+  } else { msg.textContent = `รอ Align (${dom}/${MIN_ALIGN})`; msg.className="" }
 }
 
-// ═══════════════════════════════════════════════
-// ALERTS LIST
-// ═══════════════════════════════════════════════
+// ── ALERTS ──
 function addAlertItem(d, prepend=true) {
   const list = document.getElementById("alert-list")
   const isBuy = d.direction==="BUY"
-  const verd  = (d.verdict||"WAIT").toUpperCase()
-  const ts    = d.timestamp ? d.timestamp.slice(11,16) : "—"
+  const verd = (d.verdict||"WAIT").toUpperCase()
+  const ts = d.timestamp?d.timestamp.slice(11,16):"—"
   if (list.children.length===1 && list.firstChild.textContent.includes("รอสัญญาณ")) list.innerHTML=""
-
   const div = document.createElement("div")
   div.className = `alert-item ${isBuy?"buy":"sell"}`
-  div.innerHTML = `
-    <span class="alert-pat ${isBuy?"buy":"sell"}">${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}</span>
-    <span class="alert-time">${ts}</span>
-    <span class="alert-verd av-${verd.replace(" ","-")}">${verd}</span>`
+  div.innerHTML = `<span class="alert-pat ${isBuy?"buy":"sell"}">${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}</span><span class="alert-time">${ts}</span><span class="alert-verd av-${verd.replace(" ","-")}">${verd}</span>`
   if (prepend && list.firstChild) list.insertBefore(div, list.firstChild)
   else list.appendChild(div)
-  while (list.children.length>20) list.removeChild(list.lastChild)
+  while (list.children.length>15) list.removeChild(list.lastChild)
 }
 
-// ═══════════════════════════════════════════════
-// POLLING
-// ═══════════════════════════════════════════════
+// ── POLLING ALERTS ──
 const dot = document.getElementById("ws-dot")
 const status = document.getElementById("ws-status")
-let lastId = 0, pollFail = 0
-
+let lastId=0, pollFail=0
 async function fetchAlerts() {
   try {
     const res = await fetch("/alerts?limit=30")
     const rows = await res.json()
-    pollFail = 0
-    dot.classList.add("live"); status.textContent="LIVE"
-
+    pollFail=0; dot.classList.add("live"); status.textContent="LIVE"
     if (lastId===0 && rows.length>0) {
-      const al = document.getElementById("alert-list"); al.innerHTML=""
-      rows.slice(0,20).forEach(d=>addAlertItem(d,false))
-      const latest = rows[0]
-      updateExecution(latest)
-      updateTFPanel(latest.tf||"M5", latest)
-      updateMTFBias(latest.tf||"M5", latest)
-      updateScore()
-      lastId = latest.id
-      return
+      const al=document.getElementById("alert-list"); al.innerHTML=""
+      rows.slice(0,15).forEach(d=>addAlertItem(d,false))
+      const l=rows[0]; updateExecution(l); updateTFPanel(l.tf||"M5",l); updateMTF(l.tf||"M5",l); updateScore()
+      lastId=l.id; return
     }
     const news = rows.filter(d=>d.id>lastId)
     if (news.length>0) {
-      news.reverse().forEach(d => {
-        addAlertItem(d,true)
-        updateExecution(d)
-        updateTFPanel(d.tf||"M5", d)
-        updateMTFBias(d.tf||"M5", d)
-        updateScore()
-      })
+      news.reverse().forEach(d=>{addAlertItem(d,true);updateExecution(d);updateTFPanel(d.tf||"M5",d);updateMTF(d.tf||"M5",d);updateScore()})
       lastId = news[news.length-1].id
     }
-  } catch(err) {
-    pollFail++
-    if (pollFail>2) { dot.classList.remove("live"); status.textContent="OFFLINE" }
-  }
+  } catch(e){ pollFail++; if(pollFail>2){dot.classList.remove("live");status.textContent="OFFLINE"} }
 }
-fetchAlerts(); setInterval(fetchAlerts,3000)
+
+// START
+fetchPrice(); setInterval(fetchPrice, 5000)
+fetchAlerts(); setInterval(fetchAlerts, 3000)
 </script>
 </body>
 </html>
