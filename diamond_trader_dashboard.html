@@ -276,7 +276,7 @@
 // ═══════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════
-const WS_URL  = `ws://${location.host}/ws`
+const WS_URL  = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
 const TF_LIST = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
 const MTF_TF  = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
 
