@@ -17,8 +17,9 @@
     background:var(--bg); color:var(--white);
     font-family:'JetBrains Mono','Courier New',monospace; font-size:12px;
     height:100vh; display:grid;
-    grid-template-rows:44px 1fr; grid-template-columns:1fr 320px;
+    grid-template-rows:44px 1fr; grid-template-columns:1fr 300px;
     overflow:hidden;
+    max-width:100vw;
   }
 
   /* TOPBAR */
@@ -72,8 +73,12 @@
   .gl-red{background:var(--red);} .gl-gray{background:var(--bg3);}
 
   /* SIDEBAR */
-  #sidebar { background:var(--bg2); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
-  .s-section { border-bottom:1px solid var(--border); padding:12px; }
+  #sidebar {
+    background:var(--bg2); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;
+    width:300px; min-width:300px; max-width:300px;
+  }
+  .s-section { border-bottom:1px solid var(--border); padding:12px; width:100%; }
   .s-title { font-size:10px; font-weight:700; color:var(--gray); letter-spacing:2px; margin-bottom:10px; }
 
   #verdict-box {
@@ -83,8 +88,8 @@
   #verdict-box.READY{background:var(--ready);color:#fff;} #verdict-box.WAIT{background:var(--wait);color:#fff;}
   #verdict-box.NO-TRADE{background:var(--notrade);color:#fff;}
 
-  .exec-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:11px; }
-  .exec-label { color:var(--gray); } .exec-val { color:var(--white); font-weight:600; }
+  .exec-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:11px; gap:4px; }
+  .exec-label { color:var(--gray); white-space:nowrap; } .exec-val { color:var(--white); font-weight:600; white-space:nowrap; text-align:right; }
   .exec-val.buy{color:var(--green);} .exec-val.sell{color:var(--red);}
   .exec-val.ok{color:var(--green);} .exec-val.warn{color:var(--yellow);} .exec-val.bad{color:var(--red);}
 
@@ -104,7 +109,7 @@
   .mtf-tf { width:32px; color:var(--gray); font-size:10px; }
   .mtf-bar-wrap { flex:1; height:4px; background:var(--bg3); border-radius:2px; margin:0 8px; overflow:hidden; }
   .mtf-bar { height:100%; border-radius:2px; width:0%; transition:.4s; }
-  .mtf-pat { width:72px; text-align:right; font-size:10px; color:var(--gray); }
+  .mtf-pat { width:64px; text-align:right; font-size:9px; color:var(--gray); white-space:nowrap; overflow:hidden; }
 
   #score-box { text-align:center; padding:8px; background:var(--bg3); border-radius:6px; font-size:12px; font-weight:700; margin-top:8px; }
   #confluence-msg { text-align:center; font-size:10px; margin-top:6px; color:var(--gray); }
@@ -124,7 +129,18 @@
   @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
   @keyframes flash{0%,100%{box-shadow:0 0 0 transparent;}50%{box-shadow:0 0 20px var(--green);}}
   .flash-buy{animation:flash .6s ease 2;}
-  ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px;}
+  ::-webkit-scrollbar{width:6px;height:6px;} ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px;}
+
+  /* Responsive — จอแคบลด sidebar */
+  @media (max-width:1400px) {
+    body { grid-template-columns:1fr 270px; }
+    #sidebar { width:270px; min-width:270px; max-width:270px; }
+  }
+  @media (max-width:1100px) {
+    body { grid-template-columns:1fr 240px; }
+    #sidebar { width:240px; min-width:240px; max-width:240px; }
+    .exec-row, .exec-val, .exec-label { font-size:10px; }
+  }
 </style>
 </head>
 <body>
