@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIAMOND TRADER — XAUUSDm</title>
+<style>
+  /* ── RESET & BASE ───────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #21262d;
+    --green:     #3fb950;
+    --red:       #f85149;
+    --yellow:    #e3b341;
+    --blue:      #58a6ff;
+    --orange:    #f0883e;
+    --gray:      #8b949e;
+    --white:     #e6edf3;
+    --border:    #30363d;
+    --ready:     #238636;
+    --wait:      #9e6a03;
+    --notrade:   #6e1a1a;
+  }
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 12px;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 44px 1fr;
+    grid-template-columns: 1fr 300px;
+    overflow: hidden;
+  }
+
+  /* ── TOPBAR ─────────────────────────────────────── */
+  #topbar {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+  }
+  #topbar .logo { color: var(--blue); font-weight: 700; font-size: 14px; letter-spacing: 2px; }
+  #ws-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+  #ws-dot.live { background: var(--green); }
+  #ws-status { color: var(--gray); font-size: 11px; }
+  #price-display { margin-left: auto; color: var(--yellow); font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+  #clock { color: var(--gray); font-size: 11px; }
+
+  /* ── MAIN GRID (9 TF panels) ────────────────────── */
+  #main-grid {
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+    overflow: hidden;
+  }
+  .tf-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .tf-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--gray);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .tf-pattern {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .tf-pattern.buy  { color: var(--green); }
+  .tf-pattern.sell { color: var(--red); }
+  .tf-pattern.wait { color: var(--gray); }
+  .tf-verdict {
+    position: absolute;
+    top: 10px; right: 12px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .verdict-READY    { background: var(--ready);   color: #fff; }
+  .verdict-WAIT     { background: var(--wait);    color: #fff; }
+  .verdict-NO-TRADE { background: var(--notrade); color: #fff; }
+  .verdict-default  { background: var(--bg3);     color: var(--gray); }
+  .tf-ovl { color: var(--gray); font-size: 10px; margin-top: auto; }
+  .tf-grid-line {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 0 0 8px 8px;
+  }
+  .gl-green  { background: var(--green); }
+  .gl-yellow { background: var(--yellow); }
+  .gl-red    { background: var(--red); }
+  .gl-gray   { background: var(--bg3); }
+
+  /* ── RIGHT SIDEBAR ───────────────────────────────── */
+  #sidebar {
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .s-section {
+    border-bottom: 1px solid var(--border);
+    padding: 12px;
+  }
+  .s-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--gray);
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+  }
+
+  /* Execution Panel */
+  #verdict-box {
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    margin-bottom: 12px;
+    background: var(--bg3);
+    color: var(--gray);
+    transition: all 0.3s;
+  }
+  #verdict-box.READY    { background: var(--ready);   color: #fff; }
+  #verdict-box.WAIT     { background: var(--wait);    color: #fff; }
+  #verdict-box.NO-TRADE { background: var(--notrade); color: #fff; }
+
+  .exec-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+  .exec-label { color: var(--gray); }
+  .exec-val   { color: var(--white); font-weight: 600; }
+  .exec-val.buy  { color: var(--green); }
+  .exec-val.sell { color: var(--red); }
+  .exec-val.ok   { color: var(--green); }
+  .exec-val.warn { color: var(--yellow); }
+  .exec-val.bad  { color: var(--red); }
+
+  /* OVL Meter */
+  #ovl-bar-wrap { background: var(--bg3); border-radius: 4px; height: 6px; margin-top: 4px; overflow: hidden; }
+  #ovl-bar      { height: 100%; border-radius: 4px; transition: width 0.4s, background 0.4s; width: 0%; background: var(--green); }
+
+  /* MTF Bias */
+  .mtf-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .mtf-tf   { width: 32px; color: var(--gray); font-size: 10px; }
+  .mtf-bar-wrap { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; margin: 0 8px; overflow: hidden; }
+  .mtf-bar  { height: 100%; border-radius: 2px; width: 0%; transition: all 0.4s; }
+  .mtf-pat  { width: 72px; text-align: right; font-size: 10px; color: var(--gray); }
+
+  /* Score */
+  #score-box {
+    text-align: center;
+    padding: 8px;
+    background: var(--bg3);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  /* Alerts */
+  #alert-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+  .alert-item {
+    background: var(--bg3);
+    border-radius: 6px;
+    padding: 7px 10px;
+    border-left: 3px solid var(--gray);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    animation: fadeIn 0.4s ease;
+  }
+  .alert-item.buy  { border-color: var(--green); }
+  .alert-item.sell { border-color: var(--red); }
+  .alert-pat  { font-weight: 700; font-size: 11px; }
+  .alert-pat.buy  { color: var(--green); }
+  .alert-pat.sell { color: var(--red); }
+  .alert-time { color: var(--gray); font-size: 10px; }
+  .alert-verd {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 700;
+  }
+  .av-READY    { background: var(--ready);   color: #fff; }
+  .av-WAIT     { background: var(--wait);    color: #fff; }
+  .av-NO-TRADE { background: var(--notrade); color: #fff; }
+
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ──────────────────────────────────── -->
+<div id="topbar">
+  <span class="logo">◆ DIAMOND TRADER</span>
+  <div id="ws-dot"></div>
+  <span id="ws-status">OFFLINE</span>
+  <span id="price-display">—</span>
+  <span id="clock">—</span>
+</div>
+
+<!-- ── MAIN GRID (9 TF) ───────────────────────── -->
+<div id="main-grid">
+  <!-- สร้างจาก JS -->
+</div>
+
+<!-- ── SIDEBAR ────────────────────────────────── -->
+<div id="sidebar">
+
+  <!-- EXECUTION -->
+  <div class="s-section">
+    <div class="s-title">■ EXECUTION</div>
+    <div id="verdict-box">WAIT</div>
+    <div class="exec-row"><span class="exec-label">ENTRY</span><span id="ex-entry" class="exec-val">—</span></div>
+    <div class="exec-row"><span class="exec-label">SL</span><span id="ex-sl" class="exec-val bad">—</span></div>
+    <div class="exec-row"><span class="exec-label">TP (1:3)</span><span id="ex-tp" class="exec-val ok">—</span></div>
+    <div class="exec-row"><span class="exec-label">PA</span><span id="ex-pa" class="exec-val">—</span></div>
+    <div class="exec-row"><span class="exec-label">Spread</span><span id="ex-spread" class="exec-val ok">160 pts ✓</span></div>
+    <div class="exec-row"><span class="exec-label">OVL</span><span id="ex-ovl" class="exec-val">—</span></div>
+    <div id="ovl-bar-wrap"><div id="ovl-bar"></div></div>
+  </div>
+
+  <!-- MTF BIAS -->
+  <div class="s-section">
+    <div class="s-title">■ MTF BIAS FRAMEWORK</div>
+    <div id="mtf-rows">
+      <!-- สร้างจาก JS -->
+    </div>
+    <div id="score-box" style="margin-top:8px;">Score: Bull 0 / Bear 0</div>
+  </div>
+
+  <!-- ALERTS -->
+  <div class="s-section" style="flex:1">
+    <div class="s-title">■ RECENT ALERTS</div>
+    <div id="alert-list"><div style="color:var(--gray);font-size:11px">รอสัญญาณ...</div></div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════
+const WS_URL  = `ws://${location.host}/ws`
+const TF_LIST = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
+const MTF_TF  = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
+
+// ═══════════════════════════════════════════════
+// BUILD GRID PANELS
+// ═══════════════════════════════════════════════
+const grid = document.getElementById("main-grid")
+TF_LIST.forEach(tf => {
+  grid.innerHTML += `
+  <div class="tf-panel" id="panel-${tf}">
+    <div class="tf-label">${tf}</div>
+    <div class="tf-pattern wait" id="pat-${tf}">— WAIT</div>
+    <div id="verdict-${tf}" class="tf-verdict verdict-default">WAIT</div>
+    <div class="tf-ovl" id="ovl-${tf}">OVL —</div>
+    <div class="tf-grid-line gl-gray" id="gl-${tf}"></div>
+  </div>`
+})
+
+// MTF BIAS rows
+const mtfDiv = document.getElementById("mtf-rows")
+MTF_TF.forEach(tf => {
+  mtfDiv.innerHTML += `
+  <div class="mtf-row">
+    <span class="mtf-tf">${tf}</span>
+    <div class="mtf-bar-wrap"><div class="mtf-bar" id="mb-${tf}"></div></div>
+    <span class="mtf-pat" id="mp-${tf}">—</span>
+  </div>`
+})
+
+// ═══════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════
+function updateClock() {
+  const now = new Date()
+  document.getElementById("clock").textContent =
+    now.toUTCString().slice(17,25) + " UTC"
+}
+setInterval(updateClock, 1000)
+updateClock()
+
+// ═══════════════════════════════════════════════
+// UPDATE UI FROM ALERT DATA
+// ═══════════════════════════════════════════════
+function updateExecution(data) {
+  const isBuy  = data.direction === "BUY"
+  const isSell = data.direction === "SELL"
+  const verd   = (data.verdict || "WAIT").toUpperCase()
+
+  // Verdict box
+  const vbox = document.getElementById("verdict-box")
+  vbox.textContent = verd
+  vbox.className   = verd
+
+  // Entry / SL / TP
+  document.getElementById("ex-entry").textContent = data.entry_price?.toFixed(2) || "—"
+  document.getElementById("ex-sl").textContent    = data.sl?.toFixed(2) || "—"
+  document.getElementById("ex-tp").textContent    = data.tp?.toFixed(2) || "—"
+
+  // PA
+  const paEl = document.getElementById("ex-pa")
+  paEl.textContent  = `${isBuy?"▲":"▼"} ${data.pattern} ${data.direction}`
+  paEl.className    = "exec-val " + (isBuy ? "buy" : "sell")
+
+  // Price display
+  if (data.entry_price)
+    document.getElementById("price-display").textContent = data.entry_price.toFixed(2)
+
+  // OVL
+  if (data.grid && data.entry_price) {
+    const dist = Math.abs(data.entry_price - data.grid) * 100
+    const pct  = Math.min(dist / 3, 100)
+    const bar  = document.getElementById("ovl-bar")
+    bar.style.width      = pct + "%"
+    bar.style.background = dist <= 150 ? "var(--green)" : dist <= 300 ? "var(--yellow)" : "var(--red)"
+    const ovlEl = document.getElementById("ex-ovl")
+    ovlEl.textContent  = dist.toFixed(0) + " pts"
+    ovlEl.className    = "exec-val " + (dist <= 150 ? "ok" : dist <= 300 ? "warn" : "bad")
+  }
+}
+
+function updateTFPanel(tf, data) {
+  const isBuy  = data.direction === "BUY"
+  const isSell = data.direction === "SELL"
+  const verd   = (data.verdict || "WAIT").toUpperCase()
+
+  const patEl  = document.getElementById(`pat-${tf}`)
+  patEl.textContent = `${isBuy?"▲":"▼"} ${data.pattern} ${data.direction}`
+  patEl.className   = "tf-pattern " + (isBuy ? "buy" : "sell")
+
+  const vEl = document.getElementById(`verdict-${tf}`)
+  vEl.textContent = verd
+  vEl.className   = "tf-verdict verdict-" + verd.replace(" ","-")
+
+  const gl = document.getElementById(`gl-${tf}`)
+  gl.className = "tf-grid-line " + (isBuy ? "gl-green" : "gl-red")
+
+  if (data.grid)
+    document.getElementById(`ovl-${tf}`).textContent = `GRID ${data.grid?.toFixed(2)}`
+}
+
+function updateMTFBias(tf, data) {
+  const isBuy  = data.direction === "BUY"
+  const isSell = data.direction === "SELL"
+  const bar    = document.getElementById(`mb-${tf}`)
+  if (!bar) return
+  bar.style.width      = "100%"
+  bar.style.background = isBuy ? "var(--green)" : "var(--red)"
+  const mp = document.getElementById(`mp-${tf}`)
+  if (mp) {
+    mp.textContent  = data.pattern || "—"
+    mp.style.color  = isBuy ? "var(--green)" : "var(--red)"
+  }
+}
+
+function updateScore() {
+  let bull = 0, bear = 0
+  MTF_TF.forEach(tf => {
+    const bar = document.getElementById(`mb-${tf}`)
+    if (!bar) return
+    if (bar.style.background.includes("green")) bull++
+    else if (bar.style.background.includes("red")) bear++
+  })
+  document.getElementById("score-box").innerHTML =
+    `<span style="color:var(--green)">Bull ${bull}</span> / <span style="color:var(--red)">Bear ${bear}</span>`
+}
+
+// ═══════════════════════════════════════════════
+// ALERTS LIST
+// ═══════════════════════════════════════════════
+function addAlertItem(data, prepend=true) {
+  const list   = document.getElementById("alert-list")
+  const isBuy  = data.direction === "BUY"
+  const verd   = (data.verdict || "WAIT").toUpperCase()
+  const ts     = data.timestamp ? data.timestamp.slice(11,16) : "—"
+
+  const div = document.createElement("div")
+  div.className = `alert-item ${isBuy ? "buy" : "sell"}`
+  div.innerHTML = `
+    <span class="alert-pat ${isBuy?"buy":"sell"}">${isBuy?"▲":"▼"} ${data.pattern} ${data.direction}</span>
+    <span class="alert-time">${ts}</span>
+    <span class="alert-verd av-${verd.replace(" ","-")}">${verd}</span>`
+
+  if (prepend && list.firstChild)
+    list.insertBefore(div, list.firstChild)
+  else
+    list.appendChild(div)
+
+  // ลบรายการเก่า (max 20)
+  while (list.children.length > 20)
+    list.removeChild(list.lastChild)
+}
+
+// ═══════════════════════════════════════════════
+// WEBSOCKET
+// ═══════════════════════════════════════════════
+let ws, reconnectTimer
+
+function connectWS() {
+  ws = new WebSocket(WS_URL)
+  const dot    = document.getElementById("ws-dot")
+  const status = document.getElementById("ws-status")
+
+  ws.onopen = () => {
+    dot.classList.add("live")
+    status.textContent = "LIVE"
+    console.log("[WS] connected")
+  }
+
+  ws.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data)
+
+      if (msg.type === "history") {
+        const alertList = document.getElementById("alert-list")
+        alertList.innerHTML = ""
+        const rows = msg.data || []
+        rows.slice(0,20).forEach(d => addAlertItem(d, false))
+
+        // อัปเดต panel จาก alert ล่าสุด
+        if (rows.length > 0) {
+          const latest = rows[0]
+          updateExecution(latest)
+          updateTFPanel(latest.tf || "M5", latest)
+          updateMTFBias(latest.tf || "M5", latest)
+          updateScore()
+        }
+        return
+      }
+
+      if (msg.type === "alert") {
+        const data = msg.data
+        addAlertItem(data, true)
+        updateExecution(data)
+        updateTFPanel(data.tf || "M5", data)
+        updateMTFBias(data.tf || "M5", data)
+        updateScore()
+      }
+    } catch(err) {
+      console.error("[WS] parse error", err)
+    }
+  }
+
+  ws.onclose = () => {
+    dot.classList.remove("live")
+    status.textContent = "OFFLINE"
+    console.log("[WS] disconnected — reconnecting in 3s...")
+    reconnectTimer = setTimeout(connectWS, 3000)
+  }
+
+  ws.onerror = err => {
+    console.error("[WS] error", err)
+    ws.close()
+  }
+}
+
+connectWS()
+</script>
+</body>
+</html>

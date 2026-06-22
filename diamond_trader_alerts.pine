@@ -1,0 +1,301 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+// © DIAMOND TRADER — PA Scanner v12 Master (Fully Verified Version)
+
+//@version=6
+indicator("DIAMOND TRADER — PA Scanner v12 Master", overlay=true, max_labels_count=500)
+
+// ============================================================
+//  SECTION 0: INPUTS & SETTINGS
+// ============================================================
+grp_p        = "Pattern Settings"
+wick_mult    = input.float(2.0,   "Pin Bar: ไส้ยาวกว่าเนื้อกี่เท่า", minval=1.0,  step=0.1,  group=grp_p)
+close_frac   = input.float(0.25,  "Pin Bar: ปิดใน 1/N ของ High-Low",  minval=0.05, step=0.05, group=grp_p)
+atr_len      = input.int(14,      "Pat3.1: ATR Length", minval=5, maxval=50, group=grp_p)
+engulf_ratio = input.float(0.5,   "Pat2: Engulf ratio (body[0]>=N*body[-1])", minval=0.3, step=0.05, group=grp_p)
+rest_frac    = input.float(0.5,   "P.3.2: base body < N*bar[2]", minval=0.1, step=0.05, group=grp_p)
+
+grp_g        = "Execution Filters"
+i_spreadNow   = input.int(160,     "Spread ปัจจุบัน (points)",    group=grp_g)
+i_spreadMax   = input.int(350,     "Spread Max (points)",          group=grp_g)
+
+grp_l    = "Label Settings"
+show_lbl = input.bool(true, "แสดง Label บนกราฟชาร์ต", group=grp_l)
+lbl_sz   = input.string("small", "ขนาด Label", options=["tiny","small","normal","large"], group=grp_l)
+
+grp_d     = "Dashboard Settings"
+show_dash = input.bool(true, "แสดง Dashboard", group=grp_d)
+dash_pos  = input.string("Bottom Right", "ตำแหน่ง Dashboard", options=["Bottom Right","Bottom Left","Top Right","Top Left"], group=grp_d)
+
+// ============================================================
+//  COLORS (Modern Dark Theme - Style v12)
+// ============================================================
+C_GREEN  = color.new(#3fb950, 0)  // สีเขียวต้นแบบ v12
+C_RED    = color.new(#f85149, 0)  // สีแดงต้นแบบ v12
+C_GRAY   = color.new(#ffffff, 40)
+C_HEADER = color.white
+C_BLUE   = color.new(#58a6ff, 0)
+C_ORANGE = color.new(#f0883e, 0)
+C_YELLOW = color.new(#e3b341, 0)
+
+BG_MAIN  = color.new(#0d1117, 0)
+BG_HDR   = color.new(#161b22, 0)
+BG_SEP   = color.new(#161b22, 0)
+BG_BUY   = color.new(#0a1a0f, 0)
+BG_SELL  = color.new(#1a0a0a, 0)
+BG_FOOT  = color.new(#161b22, 0)
+
+get_tcol(v) =>
+    v > 0 ? C_GREEN : v < 0 ? C_RED : C_GRAY
+
+get_bgrow(v) =>
+    v > 0 ? BG_BUY : v < 0 ? BG_SELL : BG_MAIN
+
+get_sz() =>
+    sz = size.small
+    if lbl_sz == "tiny"
+        sz := size.tiny
+    else if lbl_sz == "normal"
+        sz := size.normal
+    else if lbl_sz == "large"
+        sz := size.large
+    sz
+
+get_pat_name(v) =>
+    n = "─  No Pattern"
+    if v == 1
+        n := "▲  PA BUY P.1"
+    else if v == 2
+        n := "▲  PA BUY P.2"
+    else if v == 3
+        n := "▲  PA BUY P.3.1"
+    else if v == 4
+        n := "▲  PA BUY P.3.2"
+    else if v == 5
+        n := "▲  PA BUY P.3.3"
+    else if v == -1
+        n := "▼  PA SALE P.1"
+    else if v == -2
+        n := "▼  PA SALE P.2"
+    else if v == -3
+        n := "▼  PA SALE P.3.1"
+    else if v == -4
+        n := "▼  PA SALE P.3.2"
+    else if v == -5
+        n := "▼  PA SALE P.3.3"
+    n
+
+// ============================================================
+//  CORE DETECTION ENGINE (แก้ลอจิกความแม่นยำ v2.0 และล้างบัก MTF)
+// ============================================================
+f_detect() =>
+    _o0 = open, _h0 = high, _l0 = low, _c0 = close
+    _o1 = open[1], _h1 = high[1], _l1 = low[1], _c1 = close[1]
+    _o2 = open[2], _h2 = high[2], _l2 = low[2], _c2 = close[2]
+
+    _b0 = math.abs(_o0 - _c0)
+    _b1 = math.abs(_o1 - _c1)
+    _b2 = math.abs(_o2 - _c2)
+    _wu = _h0 - math.max(_o0, _c0)
+    _wd = math.min(_o0, _c0) - _l0
+    _mp2   = (_o1 + _c1) / 2.0
+    _mr1   = (_h1 + _l1) / 2.0
+    _mp2_2 = (_o2 + _c2) / 2.0
+
+    _midCombined = (_o2 + _c2 + _o1 + _c1) / 4.0
+
+    _bull0 = _c0 >= _o0
+    _bear0 = _c0 <  _o0
+    _bull1 = _c1 >= _o1
+    _bear1 = _c1 <  _o1
+    _bull2 = _c2 >= _o2
+    _bear2 = _c2 <  _o2
+    _atr   = ta.atr(atr_len)
+
+    _pin_buy = _b0 > 0 and _wd >= wick_mult * _b0 and _wu <= 0.5 * _b0 and _c0 >= _h0 - close_frac * (_h0 - _l0)
+    _pin_sel = _b0 > 0 and _wu >= wick_mult * _b0 and _wd <= 0.5 * _b0 and _c0 <= _l0 + close_frac * (_h0 - _l0)
+
+    _p2_buy = _b0 > 0 and _bear1 and _bull0 and _b0 >= engulf_ratio * _b1 and _c0 > _mp2
+    _p2_sel = _b0 > 0 and _bull1 and _bear0 and _b0 >= engulf_ratio * _b1 and _c0 < _mp2
+
+    _doji    = _b1 < 0.15 * _atr
+    _p31_buy = _bear2 and _doji and _bull0 and _c0 > _midCombined
+    _p31_sel = _bull2 and _doji and _bear0 and _c0 < _midCombined
+
+    _nlow    = _bear1 and _b1 < rest_frac * _b2 and _l1 <= _l2
+    _p32_buy = _bear2 and _bear1 and _nlow and _bull0 and _c0 > _midCombined
+    _nhigh   = _bull1 and _b1 < rest_frac * _b2 and _h1 >= _h2
+    _p32_sel = _bull2 and _bull1 and _nhigh and _bear0 and _c0 < _midCombined
+
+    _smbull  = _bull1 and _b1 < math.max(_b2, 1e-10)
+    _smbear  = _bear1 and _b1 < math.max(_b2, 1e-10)
+    _p33_buy = _bear2 and _smbull and _bull0 and _b0 > _b1 and _c0 > _mp2_2
+    _p33_sel = _bull2 and _smbear and _bear0 and _b0 > _b1 and _c0 < _mp2_2
+
+    _r = 0
+    if _p31_buy
+        _r := 3
+    else if _p32_buy
+        _r := 4
+    else if _p33_buy
+        _r := 5
+    else if _p2_buy
+        _r := 2
+    else if _pin_buy
+        _r := 1
+
+    if _p31_sel
+        _r := -3
+    else if _p32_sel
+        _r := -4
+    else if _p33_sel
+        _r := -5
+    else if _p2_sel
+        _r := -2
+    else if _pin_sel
+        _r := -1
+    _r
+
+// ============================================================
+//  MULTI-TIMEFRAME DATA FETCHING (Anti-Repaint)
+// ============================================================
+f_get_tf_data(tf_string) =>
+    request.security(syminfo.tickerid, tf_string, f_detect()[1], lookahead=barmerge.lookahead_off)
+
+tf_mn  = f_get_tf_data("M")
+tf_w   = f_get_tf_data("W")
+tf_d   = f_get_tf_data("D")
+tf_4h  = f_get_tf_data("240")
+tf_1h  = f_get_tf_data("60")
+tf_30m = f_get_tf_data("30")
+tf_15m = f_get_tf_data("15")
+tf_5m  = f_get_tf_data("5")
+tf_1m  = f_get_tf_data("1")
+
+// Persistent Memory Block
+var int mem_mn = 0
+var int mem_w = 0
+var int mem_d = 0
+var int mem_4h = 0
+var int mem_1h = 0
+var int mem_30m = 0
+var int mem_15m = 0
+var int mem_5m = 0
+var int mem_1m = 0
+
+if tf_mn != 0
+    mem_mn := tf_mn
+if tf_w != 0
+    mem_w := tf_w
+if tf_d != 0
+    mem_d := tf_d
+if tf_4h != 0
+    mem_4h := tf_4h
+if tf_1h != 0
+    mem_1h := tf_1h
+if tf_30m != 0
+    mem_30m := tf_30m
+if tf_15m != 0
+    mem_15m := tf_15m
+if tf_5m != 0
+    mem_5m := tf_5m
+if tf_1m != 0
+    mem_1m := tf_1m
+
+// ============================================================
+//  CURRENT TF LABELS (ระบบป้ายแจ้งเตือนแนบชิดติดไส้เทียนของจริง)
+// ============================================================
+cur = f_detect()
+spreadOK = i_spreadNow <= i_spreadMax
+
+if show_lbl and cur != 0 and barstate.isconfirmed and spreadOK
+    isBuy = cur > 0
+    
+    string cleanTxt = switch cur
+        1   => "▲ Buy P.1"
+        2   => "▲ Buy P.2"
+        3   => "▲ Buy P.3.1"
+        4   => "▲ Buy P.3.2"
+        5   => "▲ Buy P.3.3"
+        -1  => "▼ Sale P.1"
+        -2  => "▼ Sale P.2"
+        -3  => "▼ Sale P.3.1"
+        -4  => "▼ Sale P.3.2"
+        -5  => "▼ Sale P.3.3"
+        => ""
+        
+    color lblColor = isBuy ? color.new(C_GREEN, 10) : color.new(C_RED, 10)
+    labelStyle     = isBuy ? label.style_label_up : label.style_label_down
+    labelY         = isBuy ? low : high  
+    
+    label.new(bar_index, labelY, cleanTxt, color=lblColor, textcolor=color.white, style=labelStyle, size=get_sz())
+
+// ============================================================
+//  CONFLUENCE MATRIX COUNTER
+// ============================================================
+bull_count = (mem_mn>0?1:0)+(mem_w>0?1:0)+(mem_d>0?1:0)+(mem_4h>0?1:0)+(mem_1h>0?1:0)+(mem_30m>0?1:0)+(mem_15m>0?1:0)+(mem_5m>0?1:0)+(mem_1m>0?1:0)
+bear_count = (mem_mn<0?1:0)+(mem_w<0?1:0)+(mem_d<0?1:0)+(mem_4h<0?1:0)+(mem_1h<0?1:0)+(mem_30m<0?1:0)+(mem_15m<0?1:0)+(mem_5m<0?1:0)+(mem_1m<0?1:0)
+
+// ============================================================
+//  V12 MODERN THEME REPLICATED DASHBOARD
+// ============================================================
+_dpos = dash_pos == "Bottom Left" ? position.bottom_left : dash_pos == "Top Right" ? position.top_right : dash_pos == "Top Left" ? position.top_left : position.bottom_right
+
+var table dash = table.new(_dpos, 2, 16, bgcolor=BG_MAIN, border_width=1, border_color=color.new(#21262d, 0), frame_width=1, frame_color=color.new(#21262d, 0))
+
+if barstate.islast and show_dash
+    table.cell(dash, 0, 0, "DIAMOND TRADER v12", text_color=C_BLUE, bgcolor=BG_MAIN, text_size=size.normal, text_halign=text.align_left)
+    table.merge_cells(dash, 0, 0, 1, 0)
+
+    table.cell(dash, 0, 1, "TF",      text_color=C_HEADER, bgcolor=BG_HDR, text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 1, "Pattern Status", text_color=C_HEADER, bgcolor=BG_HDR, text_size=size.small, text_halign=text.align_left)
+
+    // Weekly
+    table.cell(dash, 0, 2, "Weekly / LongTerm", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 2, 1, 2)
+    table.cell(dash, 0, 3, "MN", text_color=get_tcol(mem_mn), bgcolor=get_bgrow(mem_mn), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 3, get_pat_name(mem_mn), text_color=get_tcol(mem_mn), bgcolor=get_bgrow(mem_mn), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 4, "W", text_color=get_tcol(mem_w), bgcolor=get_bgrow(mem_w), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 4, get_pat_name(mem_w), text_color=get_tcol(mem_w), bgcolor=get_bgrow(mem_w), text_size=size.small, text_halign=text.align_left)
+
+    // Daily
+    table.cell(dash, 0, 5, "Daily Framework", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 5, 1, 5)
+    table.cell(dash, 0, 6, "D", text_color=get_tcol(mem_d), bgcolor=get_bgrow(mem_d), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 6, get_pat_name(mem_d), text_color=get_tcol(mem_d), bgcolor=get_bgrow(mem_d), text_size=size.small, text_halign=text.align_left)
+
+    // Intraday
+    table.cell(dash, 0, 7, "Intraday Structure", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 7, 1, 7)
+    table.cell(dash, 0, 8, "4H", text_color=get_tcol(mem_4h), bgcolor=get_bgrow(mem_4h), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 8, get_pat_name(mem_4h), text_color=get_tcol(mem_4h), bgcolor=get_bgrow(mem_4h), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 9, "1H", text_color=get_tcol(mem_1h), bgcolor=get_bgrow(mem_1h), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 9, get_pat_name(mem_1h), text_color=get_tcol(mem_1h), bgcolor=get_bgrow(mem_1h), text_size=size.small, text_halign=text.align_left)
+
+    // Entry
+    table.cell(dash, 0, 10, "Sniper Entry Zones", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 10, 1, 10)
+    table.cell(dash, 0, 11, "30M", text_color=get_tcol(mem_30m), bgcolor=get_bgrow(mem_30m), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 11, get_pat_name(mem_30m), text_color=get_tcol(mem_30m), bgcolor=get_bgrow(mem_30m), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 12, "15M", text_color=get_tcol(mem_15m), bgcolor=get_bgrow(mem_15m), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 12, get_pat_name(mem_15m), text_color=get_tcol(mem_15m), bgcolor=get_bgrow(mem_15m), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 13, "5M", text_color=get_tcol(mem_5m), bgcolor=get_bgrow(mem_5m), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 13, get_pat_name(mem_5m), text_color=get_tcol(mem_5m), bgcolor=get_bgrow(mem_5m), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 14, "1M", text_color=get_tcol(mem_1m), bgcolor=get_bgrow(mem_1m), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 14, get_pat_name(mem_1m), text_color=get_tcol(mem_1m), bgcolor=get_bgrow(mem_1m), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(dash, 0, 15, "BULLISH: " + str.tostring(bull_count), text_color=C_GREEN, bgcolor=BG_FOOT, text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 15, "BEARISH: " + str.tostring(bear_count), text_color=C_RED, bgcolor=BG_FOOT, text_size=size.small, text_halign=text.align_center)
+
+// ============================================================
+//  ALERTS CONDITION SPECS
+// ============================================================
+alertcondition(cur == 1  and spreadOK, "PA BUY P.1",   "PA BUY P.1 Triggered")
+alertcondition(cur == 2  and spreadOK, "PA BUY P.2",   "PA BUY P.2 Triggered")
+alertcondition(cur == 3  and spreadOK, "PA BUY P.3.1", "PA BUY P.3.1 Triggered")
+alertcondition(cur == 4  and spreadOK, "PA BUY P.3.2", "PA BUY P.3.2 Triggered")
+alertcondition(cur == 5  and spreadOK, "PA BUY P.3.3", "PA BUY P.3.3 Triggered")
+alertcondition(cur == -1 and spreadOK, "PA SALE P.1",  "PA SALE P.1 Triggered")
+alertcondition(cur == -2 and spreadOK, "PA SALE P.2",  "PA SALE P.2 Triggered")
+alertcondition(cur == -3 and spreadOK, "PA SALE P.3.1", "PA SALE P.3.1 Triggered")
+alertcondition(cur == -4 and spreadOK, "PA SALE P.3.2", "PA SALE P.3.2 Triggered")
+alertcondition(cur == -5 and spreadOK, "PA SALE P.3.3", "PA SALE P.3.3 Triggered")
