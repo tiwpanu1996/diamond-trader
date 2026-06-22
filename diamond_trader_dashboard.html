@@ -5,244 +5,142 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DIAMOND TRADER — XAUUSDm</title>
 <style>
-  /* ── RESET & BASE ───────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg:        #0d1117;
-    --bg2:       #161b22;
-    --bg3:       #21262d;
-    --green:     #3fb950;
-    --red:       #f85149;
-    --yellow:    #e3b341;
-    --blue:      #58a6ff;
-    --orange:    #f0883e;
-    --gray:      #8b949e;
-    --white:     #e6edf3;
-    --border:    #30363d;
-    --ready:     #238636;
-    --wait:      #9e6a03;
-    --notrade:   #6e1a1a;
+    --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
+    --green:#3fb950; --red:#f85149; --yellow:#e3b341;
+    --blue:#58a6ff; --orange:#f0883e; --gray:#8b949e;
+    --white:#e6edf3; --border:#30363d;
+    --ready:#238636; --wait:#9e6a03; --notrade:#6e1a1a;
   }
   body {
-    background: var(--bg);
-    color: var(--white);
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
-    font-size: 12px;
-    height: 100vh;
-    display: grid;
-    grid-template-rows: 44px 1fr;
-    grid-template-columns: 1fr 300px;
-    overflow: hidden;
+    background:var(--bg); color:var(--white);
+    font-family:'JetBrains Mono','Courier New',monospace; font-size:12px;
+    height:100vh; display:grid;
+    grid-template-rows:44px 1fr; grid-template-columns:1fr 320px;
+    overflow:hidden;
   }
 
-  /* ── TOPBAR ─────────────────────────────────────── */
+  /* TOPBAR */
   #topbar {
-    grid-column: 1 / -1;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    gap: 16px;
+    grid-column:1/-1; background:var(--bg2); border-bottom:1px solid var(--border);
+    display:flex; align-items:center; padding:0 16px; gap:16px;
   }
-  #topbar .logo { color: var(--blue); font-weight: 700; font-size: 14px; letter-spacing: 2px; }
-  #ws-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
-  #ws-dot.live { background: var(--green); }
-  #ws-status { color: var(--gray); font-size: 11px; }
-  #price-display { margin-left: auto; color: var(--yellow); font-size: 18px; font-weight: 700; letter-spacing: 1px; }
-  #clock { color: var(--gray); font-size: 11px; }
+  #topbar .logo { color:var(--blue); font-weight:700; font-size:14px; letter-spacing:2px; }
+  #ws-dot { width:8px; height:8px; border-radius:50%; background:var(--red); transition:.3s; }
+  #ws-dot.live { background:var(--green); box-shadow:0 0 8px var(--green); }
+  #ws-status { color:var(--gray); font-size:11px; }
+  #price-display { margin-left:auto; color:var(--yellow); font-size:18px; font-weight:700; letter-spacing:1px; }
+  #sound-toggle {
+    background:var(--bg3); border:1px solid var(--border); color:var(--gray);
+    padding:4px 10px; border-radius:5px; cursor:pointer; font-size:11px; font-family:inherit;
+  }
+  #sound-toggle.on { color:var(--green); border-color:var(--green); }
+  #clock { color:var(--gray); font-size:11px; }
 
-  /* ── MAIN GRID (9 TF panels) ────────────────────── */
+  /* MAIN GRID */
   #main-grid {
-    padding: 10px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 8px;
-    overflow: hidden;
+    padding:10px; display:grid;
+    grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+    gap:8px; overflow:hidden;
   }
   .tf-panel {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden;
+    background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+    padding:10px 12px; display:flex; flex-direction:column; position:relative; overflow:hidden;
   }
-  .tf-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--gray);
-    letter-spacing: 1px;
-    margin-bottom: 4px;
-  }
-  .tf-pattern {
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 2px;
-  }
-  .tf-pattern.buy  { color: var(--green); }
-  .tf-pattern.sell { color: var(--red); }
-  .tf-pattern.wait { color: var(--gray); }
+  .tf-panel.active-buy  { border-color:var(--green); box-shadow:0 0 12px rgba(63,185,80,.25); }
+  .tf-panel.active-sell { border-color:var(--red);   box-shadow:0 0 12px rgba(248,81,73,.25); }
+  .tf-label { font-size:10px; font-weight:700; color:var(--gray); letter-spacing:1px; }
+  .tf-pattern { font-size:13px; font-weight:700; margin:2px 0; }
+  .tf-pattern.buy { color:var(--green); } .tf-pattern.sell { color:var(--red); } .tf-pattern.wait { color:var(--gray); }
   .tf-verdict {
-    position: absolute;
-    top: 10px; right: 12px;
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-weight: 700;
-    letter-spacing: 1px;
+    position:absolute; top:10px; right:12px; font-size:10px;
+    padding:2px 8px; border-radius:4px; font-weight:700; letter-spacing:1px;
   }
-  .verdict-READY    { background: var(--ready);   color: #fff; }
-  .verdict-WAIT     { background: var(--wait);    color: #fff; }
-  .verdict-NO-TRADE { background: var(--notrade); color: #fff; }
-  .verdict-default  { background: var(--bg3);     color: var(--gray); }
-  .tf-ovl { color: var(--gray); font-size: 10px; margin-top: auto; }
-  .tf-grid-line {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 3px;
-    border-radius: 0 0 8px 8px;
-  }
-  .gl-green  { background: var(--green); }
-  .gl-yellow { background: var(--yellow); }
-  .gl-red    { background: var(--red); }
-  .gl-gray   { background: var(--bg3); }
+  .verdict-READY{background:var(--ready);color:#fff;} .verdict-WAIT{background:var(--wait);color:#fff;}
+  .verdict-NO-TRADE{background:var(--notrade);color:#fff;} .verdict-default{background:var(--bg3);color:var(--gray);}
 
-  /* ── RIGHT SIDEBAR ───────────────────────────────── */
-  #sidebar {
-    background: var(--bg2);
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-  }
-  .s-section {
-    border-bottom: 1px solid var(--border);
-    padding: 12px;
-  }
-  .s-title {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--gray);
-    letter-spacing: 2px;
-    margin-bottom: 10px;
-  }
+  /* candle chart */
+  .tf-chart { flex:1; margin:6px 0; min-height:40px; }
+  .tf-chart svg { width:100%; height:100%; }
 
-  /* Execution Panel */
+  .tf-footer { display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--gray); margin-top:auto; }
+  .tf-cf { color:var(--gray); }
+  .tf-cf.ready { color:var(--green); }
+  .tf-grid-line { position:absolute; bottom:0; left:0; right:0; height:3px; }
+  .gl-green{background:var(--green);} .gl-yellow{background:var(--yellow);}
+  .gl-red{background:var(--red);} .gl-gray{background:var(--bg3);}
+
+  /* SIDEBAR */
+  #sidebar { background:var(--bg2); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+  .s-section { border-bottom:1px solid var(--border); padding:12px; }
+  .s-title { font-size:10px; font-weight:700; color:var(--gray); letter-spacing:2px; margin-bottom:10px; }
+
   #verdict-box {
-    text-align: center;
-    padding: 10px;
-    border-radius: 6px;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    margin-bottom: 12px;
-    background: var(--bg3);
-    color: var(--gray);
-    transition: all 0.3s;
+    text-align:center; padding:10px; border-radius:6px; font-size:18px; font-weight:700;
+    letter-spacing:3px; margin-bottom:12px; background:var(--bg3); color:var(--gray); transition:.3s;
   }
-  #verdict-box.READY    { background: var(--ready);   color: #fff; }
-  #verdict-box.WAIT     { background: var(--wait);    color: #fff; }
-  #verdict-box.NO-TRADE { background: var(--notrade); color: #fff; }
+  #verdict-box.READY{background:var(--ready);color:#fff;} #verdict-box.WAIT{background:var(--wait);color:#fff;}
+  #verdict-box.NO-TRADE{background:var(--notrade);color:#fff;}
 
-  .exec-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 6px;
-    font-size: 11px;
+  .exec-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:11px; }
+  .exec-label { color:var(--gray); } .exec-val { color:var(--white); font-weight:600; }
+  .exec-val.buy{color:var(--green);} .exec-val.sell{color:var(--red);}
+  .exec-val.ok{color:var(--green);} .exec-val.warn{color:var(--yellow);} .exec-val.bad{color:var(--red);}
+
+  #ovl-bar-wrap { background:var(--bg3); border-radius:4px; height:6px; margin-top:4px; overflow:hidden; }
+  #ovl-bar { height:100%; border-radius:4px; transition:.4s; width:0%; background:var(--green); }
+
+  /* Sideway badge */
+  #sideway-box {
+    text-align:center; padding:6px; border-radius:5px; font-size:11px; font-weight:700;
+    background:var(--bg3); color:var(--gray); margin-top:8px;
   }
-  .exec-label { color: var(--gray); }
-  .exec-val   { color: var(--white); font-weight: 600; }
-  .exec-val.buy  { color: var(--green); }
-  .exec-val.sell { color: var(--red); }
-  .exec-val.ok   { color: var(--green); }
-  .exec-val.warn { color: var(--yellow); }
-  .exec-val.bad  { color: var(--red); }
+  #sideway-box.box{background:#1a2f1a;color:var(--green);}
+  #sideway-box.wide{background:var(--notrade);color:#fff;}
+  #sideway-box.tri{background:#3a2f0a;color:var(--yellow);}
 
-  /* OVL Meter */
-  #ovl-bar-wrap { background: var(--bg3); border-radius: 4px; height: 6px; margin-top: 4px; overflow: hidden; }
-  #ovl-bar      { height: 100%; border-radius: 4px; transition: width 0.4s, background 0.4s; width: 0%; background: var(--green); }
+  .mtf-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:5px; }
+  .mtf-tf { width:32px; color:var(--gray); font-size:10px; }
+  .mtf-bar-wrap { flex:1; height:4px; background:var(--bg3); border-radius:2px; margin:0 8px; overflow:hidden; }
+  .mtf-bar { height:100%; border-radius:2px; width:0%; transition:.4s; }
+  .mtf-pat { width:72px; text-align:right; font-size:10px; color:var(--gray); }
 
-  /* MTF Bias */
-  .mtf-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 5px;
-  }
-  .mtf-tf   { width: 32px; color: var(--gray); font-size: 10px; }
-  .mtf-bar-wrap { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; margin: 0 8px; overflow: hidden; }
-  .mtf-bar  { height: 100%; border-radius: 2px; width: 0%; transition: all 0.4s; }
-  .mtf-pat  { width: 72px; text-align: right; font-size: 10px; color: var(--gray); }
+  #score-box { text-align:center; padding:8px; background:var(--bg3); border-radius:6px; font-size:12px; font-weight:700; margin-top:8px; }
+  #confluence-msg { text-align:center; font-size:10px; margin-top:6px; color:var(--gray); }
+  #confluence-msg.align { color:var(--green); }
 
-  /* Score */
-  #score-box {
-    text-align: center;
-    padding: 8px;
-    background: var(--bg3);
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  /* Alerts */
-  #alert-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+  #alert-list { display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto; }
   .alert-item {
-    background: var(--bg3);
-    border-radius: 6px;
-    padding: 7px 10px;
-    border-left: 3px solid var(--gray);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    animation: fadeIn 0.4s ease;
+    background:var(--bg3); border-radius:6px; padding:7px 10px; border-left:3px solid var(--gray);
+    display:flex; justify-content:space-between; align-items:center; animation:fadeIn .4s ease;
   }
-  .alert-item.buy  { border-color: var(--green); }
-  .alert-item.sell { border-color: var(--red); }
-  .alert-pat  { font-weight: 700; font-size: 11px; }
-  .alert-pat.buy  { color: var(--green); }
-  .alert-pat.sell { color: var(--red); }
-  .alert-time { color: var(--gray); font-size: 10px; }
-  .alert-verd {
-    font-size: 9px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-weight: 700;
-  }
-  .av-READY    { background: var(--ready);   color: #fff; }
-  .av-WAIT     { background: var(--wait);    color: #fff; }
-  .av-NO-TRADE { background: var(--notrade); color: #fff; }
+  .alert-item.buy{border-color:var(--green);} .alert-item.sell{border-color:var(--red);}
+  .alert-pat{font-weight:700;font-size:11px;} .alert-pat.buy{color:var(--green);} .alert-pat.sell{color:var(--red);}
+  .alert-time{color:var(--gray);font-size:10px;}
+  .alert-verd{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:700;}
+  .av-READY{background:var(--ready);color:#fff;} .av-WAIT{background:var(--wait);color:#fff;} .av-NO-TRADE{background:var(--notrade);color:#fff;}
 
-  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
+  @keyframes flash{0%,100%{box-shadow:0 0 0 transparent;}50%{box-shadow:0 0 20px var(--green);}}
+  .flash-buy{animation:flash .6s ease 2;}
+  ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px;}
 </style>
 </head>
 <body>
 
-<!-- ── TOPBAR ──────────────────────────────────── -->
 <div id="topbar">
   <span class="logo">◆ DIAMOND TRADER</span>
   <div id="ws-dot"></div>
   <span id="ws-status">OFFLINE</span>
+  <button id="sound-toggle" onclick="toggleSound()">🔔 SOUND OFF</button>
   <span id="price-display">—</span>
   <span id="clock">—</span>
 </div>
 
-<!-- ── MAIN GRID (9 TF) ───────────────────────── -->
-<div id="main-grid">
-  <!-- สร้างจาก JS -->
-</div>
+<div id="main-grid"></div>
 
-<!-- ── SIDEBAR ────────────────────────────────── -->
 <div id="sidebar">
-
-  <!-- EXECUTION -->
   <div class="s-section">
     <div class="s-title">■ EXECUTION</div>
     <div id="verdict-box">WAIT</div>
@@ -250,38 +148,42 @@
     <div class="exec-row"><span class="exec-label">SL</span><span id="ex-sl" class="exec-val bad">—</span></div>
     <div class="exec-row"><span class="exec-label">TP (1:3)</span><span id="ex-tp" class="exec-val ok">—</span></div>
     <div class="exec-row"><span class="exec-label">PA</span><span id="ex-pa" class="exec-val">—</span></div>
+    <div class="exec-row"><span class="exec-label">CF M5</span><span id="ex-cf" class="exec-val">—</span></div>
     <div class="exec-row"><span class="exec-label">Spread</span><span id="ex-spread" class="exec-val ok">160 pts ✓</span></div>
     <div class="exec-row"><span class="exec-label">OVL</span><span id="ex-ovl" class="exec-val">—</span></div>
     <div id="ovl-bar-wrap"><div id="ovl-bar"></div></div>
+    <div id="sideway-box">SIDEWAY —</div>
   </div>
 
-  <!-- MTF BIAS -->
   <div class="s-section">
     <div class="s-title">■ MTF BIAS FRAMEWORK</div>
-    <div id="mtf-rows">
-      <!-- สร้างจาก JS -->
-    </div>
-    <div id="score-box" style="margin-top:8px;">Score: Bull 0 / Bear 0</div>
+    <div id="mtf-rows"></div>
+    <div id="score-box">Bull 0 / Bear 0</div>
+    <div id="confluence-msg">รอ Confluence</div>
   </div>
 
-  <!-- ALERTS -->
   <div class="s-section" style="flex:1">
     <div class="s-title">■ RECENT ALERTS</div>
     <div id="alert-list"><div style="color:var(--gray);font-size:11px">รอสัญญาณ...</div></div>
   </div>
-
 </div>
 
 <script>
 // ═══════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════
-// HTTP Polling mode (WebSocket removed for Railway compatibility)
 const TF_LIST = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
 const MTF_TF  = ["MN","W1","D1","H4","H1","M30","M15","M5","M1"]
+const MIN_ALIGN = 4   // ต้อง align อย่างน้อย 4 TF
+
+// state ของแต่ละ TF (เก็บ pattern ล่าสุด)
+const tfState = {}
+TF_LIST.forEach(tf => tfState[tf] = { dir:null, pattern:null })
+
+let soundOn = false
 
 // ═══════════════════════════════════════════════
-// BUILD GRID PANELS
+// BUILD PANELS
 // ═══════════════════════════════════════════════
 const grid = document.getElementById("main-grid")
 TF_LIST.forEach(tf => {
@@ -290,12 +192,15 @@ TF_LIST.forEach(tf => {
     <div class="tf-label">${tf}</div>
     <div class="tf-pattern wait" id="pat-${tf}">— WAIT</div>
     <div id="verdict-${tf}" class="tf-verdict verdict-default">WAIT</div>
-    <div class="tf-ovl" id="ovl-${tf}">OVL —</div>
+    <div class="tf-chart" id="chart-${tf}">${miniCandles(tf,'wait')}</div>
+    <div class="tf-footer">
+      <span id="cf-${tf}" class="tf-cf">CF —</span>
+      <span id="ovl-${tf}">OVL —</span>
+    </div>
     <div class="tf-grid-line gl-gray" id="gl-${tf}"></div>
   </div>`
 })
 
-// MTF BIAS rows
 const mtfDiv = document.getElementById("mtf-rows")
 MTF_TF.forEach(tf => {
   mtfDiv.innerHTML += `
@@ -307,92 +212,169 @@ MTF_TF.forEach(tf => {
 })
 
 // ═══════════════════════════════════════════════
+// MINI CANDLE CHART (จำลอง — seed จากชื่อ TF)
+// ═══════════════════════════════════════════════
+function miniCandles(tf, mode) {
+  let seed = tf.split("").reduce((a,c)=>a+c.charCodeAt(0),0)
+  const rnd = () => { seed = (seed*9301+49297)%233280; return seed/233280 }
+  const n = 7, W = 100, H = 40, cw = W/n
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`
+  let y = H/2
+  for (let i=0; i<n; i++) {
+    const up = mode==='buy' ? rnd()>0.35 : mode==='sell' ? rnd()<0.35 : rnd()>0.5
+    const body = 4 + rnd()*8
+    const o = y, c = up ? y-body : y+body
+    y = c + (rnd()-0.5)*4
+    y = Math.max(8, Math.min(H-8, y))
+    const x = i*cw + cw/2
+    const top = Math.min(o,c) - (2+rnd()*3)
+    const bot = Math.max(o,c) + (2+rnd()*3)
+    const col = up ? '#3fb950' : '#f85149'
+    svg += `<line x1="${x}" y1="${top}" x2="${x}" y2="${bot}" stroke="${col}" stroke-width="0.6"/>`
+    svg += `<rect x="${x-cw*0.3}" y="${Math.min(o,c)}" width="${cw*0.6}" height="${Math.abs(c-o)||1}" fill="${col}"/>`
+  }
+  svg += `</svg>`
+  return svg
+}
+
+// ═══════════════════════════════════════════════
+// SOUND
+// ═══════════════════════════════════════════════
+function toggleSound() {
+  soundOn = !soundOn
+  const btn = document.getElementById("sound-toggle")
+  btn.textContent = soundOn ? "🔔 SOUND ON" : "🔔 SOUND OFF"
+  btn.className   = soundOn ? "on" : ""
+  if (soundOn) playBeep()  // ทดสอบเสียง + unlock audio
+}
+
+function playBeep() {
+  if (!soundOn) return
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)()
+    const o = ctx.createOscillator(), g = ctx.createGain()
+    o.connect(g); g.connect(ctx.destination)
+    o.type = "sine"; o.frequency.value = 880
+    g.gain.setValueAtTime(0.2, ctx.currentTime)
+    g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime+0.3)
+    o.start(); o.stop(ctx.currentTime+0.3)
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════
 // CLOCK
 // ═══════════════════════════════════════════════
 function updateClock() {
-  const now = new Date()
-  document.getElementById("clock").textContent =
-    now.toUTCString().slice(17,25) + " UTC"
+  document.getElementById("clock").textContent = new Date().toUTCString().slice(17,25)+" UTC"
 }
-setInterval(updateClock, 1000)
-updateClock()
+setInterval(updateClock,1000); updateClock()
 
 // ═══════════════════════════════════════════════
-// UPDATE UI FROM ALERT DATA
+// UPDATE: EXECUTION
 // ═══════════════════════════════════════════════
-function updateExecution(data) {
-  const isBuy  = data.direction === "BUY"
-  const isSell = data.direction === "SELL"
-  const verd   = (data.verdict || "WAIT").toUpperCase()
+function updateExecution(d) {
+  const isBuy = d.direction==="BUY"
+  const verd  = (d.verdict||"WAIT").toUpperCase()
 
-  // Verdict box
   const vbox = document.getElementById("verdict-box")
-  vbox.textContent = verd
-  vbox.className   = verd
+  vbox.textContent = verd; vbox.className = verd
 
-  // Entry / SL / TP
-  document.getElementById("ex-entry").textContent = data.entry_price?.toFixed(2) || "—"
-  document.getElementById("ex-sl").textContent    = data.sl?.toFixed(2) || "—"
-  document.getElementById("ex-tp").textContent    = data.tp?.toFixed(2) || "—"
+  document.getElementById("ex-entry").textContent = d.entry_price?d.entry_price.toFixed(2):"—"
+  document.getElementById("ex-sl").textContent    = d.sl?d.sl.toFixed(2):"—"
+  document.getElementById("ex-tp").textContent    = d.tp?d.tp.toFixed(2):"—"
 
-  // PA
   const paEl = document.getElementById("ex-pa")
-  paEl.textContent  = `${isBuy?"▲":"▼"} ${data.pattern} ${data.direction}`
-  paEl.className    = "exec-val " + (isBuy ? "buy" : "sell")
+  paEl.textContent = `${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}`
+  paEl.className   = "exec-val "+(isBuy?"buy":"sell")
 
-  // Price display
-  if (data.entry_price)
-    document.getElementById("price-display").textContent = data.entry_price.toFixed(2)
+  // CF M5
+  const cf = d.cf_count || 0
+  const cfEl = document.getElementById("ex-cf")
+  cfEl.textContent = cf>0 ? `${cf}/3 ${cf>=3?"✓":""}` : "—"
+  cfEl.className   = "exec-val "+(cf>=3?"ok":cf>0?"warn":"")
+
+  if (d.entry_price)
+    document.getElementById("price-display").textContent = d.entry_price.toFixed(2)
 
   // OVL
-  if (data.grid && data.entry_price) {
-    const dist = Math.abs(data.entry_price - data.grid) * 100
-    const pct  = Math.min(dist / 3, 100)
-    const bar  = document.getElementById("ovl-bar")
-    bar.style.width      = pct + "%"
-    bar.style.background = dist <= 150 ? "var(--green)" : dist <= 300 ? "var(--yellow)" : "var(--red)"
+  let dist = d.ovl_pts || (d.grid && d.entry_price ? Math.abs(d.entry_price-d.grid)*100 : 0)
+  if (dist) {
+    const pct = Math.min(dist/3,100)
+    const bar = document.getElementById("ovl-bar")
+    bar.style.width = pct+"%"
+    bar.style.background = dist<=150?"var(--green)":dist<=300?"var(--yellow)":"var(--red)"
     const ovlEl = document.getElementById("ex-ovl")
-    ovlEl.textContent  = dist.toFixed(0) + " pts"
-    ovlEl.className    = "exec-val " + (dist <= 150 ? "ok" : dist <= 300 ? "warn" : "bad")
+    ovlEl.textContent = dist.toFixed(0)+" pts"
+    ovlEl.className = "exec-val "+(dist<=150?"ok":dist<=300?"warn":"bad")
   }
+
+  // Sideway
+  updateSideway(d.sideway)
 }
 
-function updateTFPanel(tf, data) {
-  const isBuy  = data.direction === "BUY"
-  const isSell = data.direction === "SELL"
-  const verd   = (data.verdict || "WAIT").toUpperCase()
+function updateSideway(sw) {
+  const box = document.getElementById("sideway-box")
+  if (!sw) { box.textContent="SIDEWAY —"; box.className=""; return }
+  const s = sw.toUpperCase()
+  if (s.includes("BOX")||s.includes("EDGE")) { box.textContent="BOX · PLAY EDGES"; box.className="box" }
+  else if (s.includes("WIDE")) { box.textContent="WIDE · NO-TRADE"; box.className="wide" }
+  else if (s.includes("TRI")) { box.textContent="TRIANGLE · WAIT BREAK"; box.className="tri" }
+  else { box.textContent="TREND"; box.className="" }
+}
 
-  const patEl  = document.getElementById(`pat-${tf}`)
-  patEl.textContent = `${isBuy?"▲":"▼"} ${data.pattern} ${data.direction}`
-  patEl.className   = "tf-pattern " + (isBuy ? "buy" : "sell")
+// ═══════════════════════════════════════════════
+// UPDATE: TF PANEL
+// ═══════════════════════════════════════════════
+function updateTFPanel(tf, d) {
+  const isBuy = d.direction==="BUY"
+  const verd  = (d.verdict||"WAIT").toUpperCase()
+  const panel = document.getElementById(`panel-${tf}`)
+  if (!panel) return
+
+  panel.className = "tf-panel " + (isBuy?"active-buy":"active-sell")
+
+  const patEl = document.getElementById(`pat-${tf}`)
+  patEl.textContent = `${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}`
+  patEl.className = "tf-pattern "+(isBuy?"buy":"sell")
 
   const vEl = document.getElementById(`verdict-${tf}`)
-  vEl.textContent = verd
-  vEl.className   = "tf-verdict verdict-" + verd.replace(" ","-")
+  vEl.textContent = verd; vEl.className = "tf-verdict verdict-"+verd.replace(" ","-")
+
+  // candle chart redraw
+  document.getElementById(`chart-${tf}`).innerHTML = miniCandles(tf, isBuy?'buy':'sell')
+
+  // CF
+  const cf = d.cf_count||0
+  const cfEl = document.getElementById(`cf-${tf}`)
+  cfEl.textContent = cf>0?`CF ${cf}/3`:"CF —"
+  cfEl.className = "tf-cf "+(cf>=3?"ready":"")
 
   const gl = document.getElementById(`gl-${tf}`)
-  gl.className = "tf-grid-line " + (isBuy ? "gl-green" : "gl-red")
+  gl.className = "tf-grid-line "+(isBuy?"gl-green":"gl-red")
 
-  if (data.grid)
-    document.getElementById(`ovl-${tf}`).textContent = `GRID ${data.grid?.toFixed(2)}`
+  if (d.grid) document.getElementById(`ovl-${tf}`).textContent = `G ${d.grid.toFixed(2)}`
+
+  // flash + sound
+  if (verd==="READY") { panel.classList.add("flash-buy"); setTimeout(()=>panel.classList.remove("flash-buy"),1200); playBeep() }
+
+  tfState[tf] = { dir:d.direction, pattern:d.pattern }
 }
 
-function updateMTFBias(tf, data) {
-  const isBuy  = data.direction === "BUY"
-  const isSell = data.direction === "SELL"
-  const bar    = document.getElementById(`mb-${tf}`)
+// ═══════════════════════════════════════════════
+// UPDATE: MTF BIAS + CONFLUENCE
+// ═══════════════════════════════════════════════
+function updateMTFBias(tf, d) {
+  const isBuy = d.direction==="BUY"
+  const bar = document.getElementById(`mb-${tf}`)
   if (!bar) return
-  bar.style.width      = "100%"
-  bar.style.background = isBuy ? "var(--green)" : "var(--red)"
+  bar.style.width = "100%"
+  bar.style.background = isBuy?"var(--green)":"var(--red)"
   const mp = document.getElementById(`mp-${tf}`)
-  if (mp) {
-    mp.textContent  = data.pattern || "—"
-    mp.style.color  = isBuy ? "var(--green)" : "var(--red)"
-  }
+  if (mp) { mp.textContent = d.pattern||"—"; mp.style.color = isBuy?"var(--green)":"var(--red)" }
 }
 
 function updateScore() {
-  let bull = 0, bear = 0
+  let bull=0, bear=0
   MTF_TF.forEach(tf => {
     const bar = document.getElementById(`mb-${tf}`)
     if (!bar) return
@@ -401,88 +383,83 @@ function updateScore() {
   })
   document.getElementById("score-box").innerHTML =
     `<span style="color:var(--green)">Bull ${bull}</span> / <span style="color:var(--red)">Bear ${bear}</span>`
+
+  // Confluence
+  const msg = document.getElementById("confluence-msg")
+  const dom = Math.max(bull,bear)
+  if (dom >= MIN_ALIGN) {
+    const side = bull>bear ? "BUY" : "SELL"
+    msg.textContent = `✓ CONFLUENCE ${side} (${dom}/${MIN_ALIGN})`
+    msg.className = "align"
+  } else {
+    msg.textContent = `รอ Align (${dom}/${MIN_ALIGN})`
+    msg.className = ""
+  }
 }
 
 // ═══════════════════════════════════════════════
 // ALERTS LIST
 // ═══════════════════════════════════════════════
-function addAlertItem(data, prepend=true) {
-  const list   = document.getElementById("alert-list")
-  const isBuy  = data.direction === "BUY"
-  const verd   = (data.verdict || "WAIT").toUpperCase()
-  const ts     = data.timestamp ? data.timestamp.slice(11,16) : "—"
+function addAlertItem(d, prepend=true) {
+  const list = document.getElementById("alert-list")
+  const isBuy = d.direction==="BUY"
+  const verd  = (d.verdict||"WAIT").toUpperCase()
+  const ts    = d.timestamp ? d.timestamp.slice(11,16) : "—"
+  if (list.children.length===1 && list.firstChild.textContent.includes("รอสัญญาณ")) list.innerHTML=""
 
   const div = document.createElement("div")
-  div.className = `alert-item ${isBuy ? "buy" : "sell"}`
+  div.className = `alert-item ${isBuy?"buy":"sell"}`
   div.innerHTML = `
-    <span class="alert-pat ${isBuy?"buy":"sell"}">${isBuy?"▲":"▼"} ${data.pattern} ${data.direction}</span>
+    <span class="alert-pat ${isBuy?"buy":"sell"}">${isBuy?"▲":"▼"} ${d.pattern} ${d.direction}</span>
     <span class="alert-time">${ts}</span>
     <span class="alert-verd av-${verd.replace(" ","-")}">${verd}</span>`
-
-  if (prepend && list.firstChild)
-    list.insertBefore(div, list.firstChild)
-  else
-    list.appendChild(div)
-
-  // ลบรายการเก่า (max 20)
-  while (list.children.length > 20)
-    list.removeChild(list.lastChild)
+  if (prepend && list.firstChild) list.insertBefore(div, list.firstChild)
+  else list.appendChild(div)
+  while (list.children.length>20) list.removeChild(list.lastChild)
 }
 
 // ═══════════════════════════════════════════════
-// HTTP POLLING (ทำงานได้ทุก platform)
+// POLLING
 // ═══════════════════════════════════════════════
-const dot    = document.getElementById("ws-dot")
+const dot = document.getElementById("ws-dot")
 const status = document.getElementById("ws-status")
-let lastId   = 0
-let pollFail = 0
+let lastId = 0, pollFail = 0
 
 async function fetchAlerts() {
   try {
-    const res  = await fetch("/alerts?limit=30")
+    const res = await fetch("/alerts?limit=30")
     const rows = await res.json()
     pollFail = 0
-    dot.classList.add("live")
-    status.textContent = "LIVE"
+    dot.classList.add("live"); status.textContent="LIVE"
 
-    // โหลด history ครั้งแรก
-    if (lastId === 0 && rows.length > 0) {
-      const alertList = document.getElementById("alert-list")
-      alertList.innerHTML = ""
-      rows.slice(0,20).forEach(d => addAlertItem(d, false))
+    if (lastId===0 && rows.length>0) {
+      const al = document.getElementById("alert-list"); al.innerHTML=""
+      rows.slice(0,20).forEach(d=>addAlertItem(d,false))
       const latest = rows[0]
       updateExecution(latest)
-      updateTFPanel(latest.tf || "M5", latest)
-      updateMTFBias(latest.tf || "M5", latest)
+      updateTFPanel(latest.tf||"M5", latest)
+      updateMTFBias(latest.tf||"M5", latest)
       updateScore()
       lastId = latest.id
       return
     }
-
-    // เช็ค alert ใหม่
-    const newAlerts = rows.filter(d => d.id > lastId)
-    if (newAlerts.length > 0) {
-      newAlerts.reverse().forEach(data => {
-        addAlertItem(data, true)
-        updateExecution(data)
-        updateTFPanel(data.tf || "M5", data)
-        updateMTFBias(data.tf || "M5", data)
+    const news = rows.filter(d=>d.id>lastId)
+    if (news.length>0) {
+      news.reverse().forEach(d => {
+        addAlertItem(d,true)
+        updateExecution(d)
+        updateTFPanel(d.tf||"M5", d)
+        updateMTFBias(d.tf||"M5", d)
         updateScore()
       })
-      lastId = newAlerts[newAlerts.length - 1].id
+      lastId = news[news.length-1].id
     }
   } catch(err) {
     pollFail++
-    if (pollFail > 2) {
-      dot.classList.remove("live")
-      status.textContent = "OFFLINE"
-    }
+    if (pollFail>2) { dot.classList.remove("live"); status.textContent="OFFLINE" }
   }
 }
-
-// Poll ทุก 3 วินาที
-fetchAlerts()
-setInterval(fetchAlerts, 3000)
+fetchAlerts(); setInterval(fetchAlerts,3000)
 </script>
 </body>
 </html>
