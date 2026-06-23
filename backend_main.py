@@ -26,7 +26,16 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT,
         ticker TEXT, interval TEXT, pattern TEXT, direction TEXT,
         price REAL, verdict TEXT, raw TEXT)""")
-    conn.commit(); conn.close()
+    conn.commit()
+    # Auto-migration: เพิ่ม column ที่ขาดใน schema เก่า
+    existing = [r[1] for r in conn.execute("PRAGMA table_info(alerts)")]
+    needed = ["timestamp","ticker","interval","pattern","direction","price","verdict","raw"]
+    for col in needed:
+        if col not in existing:
+            type_map = {"price": "REAL"}
+            conn.execute(f"ALTER TABLE alerts ADD COLUMN {col} {type_map.get(col,'TEXT')}")
+    conn.commit()
+    conn.close()
 
 def _cf_display(count, passed, direction):
     d = "BUY" if direction=="buy" else "SELL" if direction=="sell" else "—"
