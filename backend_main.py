@@ -8,7 +8,15 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
-import sqlite3, json, os, httpx, asyncio, math
+import sqlite3, json, os, httpx, asyncio, math, logging
+
+# ── Logging setup ─────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S"
+)
+log = logging.getLogger("diamond")
 
 DB_PATH      = os.getenv("DB_PATH", "diamond_trader.db")
 BINANCE_BASE = "https://api.binance.com/api/v3"
@@ -143,8 +151,8 @@ async def fetch_paxg_price():
                 r = await c.get(f"{BINANCE_BASE}/ticker/price", params={"symbol": PAXG_SYMBOL})
                 last_price["price"]      = float(r.json()["price"])
                 last_price["updated_at"] = datetime.utcnow().isoformat()
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("fetch_paxg: %s", e)
         await asyncio.sleep(10)
 
 async def fetch_usdthb():
@@ -155,8 +163,8 @@ async def fetch_usdthb():
                 rate = r.json()["rates"].get("THB", 36.5)
                 usdthb_rate["rate"]       = float(rate)
                 usdthb_rate["updated_at"] = datetime.utcnow().isoformat()
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("fetch_usdthb: %s", e)
         await asyncio.sleep(300)  # every 5 min
 
 async def fetch_economic_news():
@@ -210,8 +218,8 @@ async def fetch_economic_news():
                 )
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("fetch_news: %s", e)
         await asyncio.sleep(3600)  # every 1 hour
 
 async def cleanup_breakout():
@@ -235,10 +243,8 @@ async def cleanup_old_alerts():
         await asyncio.sleep(1800)  # รอ 30 นาทีก่อน (ไม่ cleanup ตอนเริ่ม)
         try:
             conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
-            # นับ rows ปัจจุบัน
             count = conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
             if count > 500:
-                # ลบ rows เก่าเกิน 500
                 conn.execute("""
                     DELETE FROM alerts WHERE id NOT IN (
                         SELECT id FROM alerts ORDER BY id DESC LIMIT 500
@@ -246,9 +252,12 @@ async def cleanup_old_alerts():
                 """)
                 deleted = count - 500
                 conn.commit()
+                log.info("cleanup_alerts: deleted %d rows, kept 500", deleted)
+            else:
+                log.info("cleanup_alerts: %d rows OK, no cleanup needed", count)
             conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error("cleanup_alerts failed: %s", e)
 
 @asynccontextmanager
 async def lifespan(app):
@@ -356,6 +365,7 @@ async def post_alert(request: Request):
             "ticker":     str(body.get("ticker", "")),
             "updated_at": datetime.utcnow().isoformat(),
         })
+        log.info("CF_UPDATE count=%d pass=%s dir=%s", cf_state["cf_count"], cf_state["cf_pass"], cf_state["cf_dir"])
         return {"status":"ok","type":"CF_UPDATE",
                 "display": _cf_display(cf_state["cf_count"], cf_state["cf_pass"], cf_state["cf_dir"])}
 
@@ -376,6 +386,7 @@ async def post_alert(request: Request):
                 "sw_low_body":  body.get("sw_low_body"),
                 "updated_at":   datetime.utcnow().isoformat(),
             }
+        log.info("STRUCT_UPDATE [%s] struct=%s dir=%s", iv, body.get("structure",""), body.get("direction",""))
         return {"status":"ok","type":"STRUCT_UPDATE","interval":iv}
 
     # ── ZONE_UPDATE ──
@@ -429,6 +440,7 @@ async def post_alert(request: Request):
     )
     conn.commit()
     conn.close()
+    log.info("PA_SIGNAL [%s] %s %s @ %.2f", iv, body.get("pattern",""), body.get("direction",""), price_val)
     return {"status":"ok","type":"PA_SIGNAL","pattern":body.get("pattern","")}
 
 if __name__ == "__main__":
