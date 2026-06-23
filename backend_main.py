@@ -14,7 +14,7 @@ DB_PATH      = os.getenv("DB_PATH", "diamond_trader.db")
 BINANCE_BASE = "https://api.binance.com/api/v3"
 PAXG_SYMBOL  = "PAXGUSDT"
 
-cf_state: dict = {
+last_price: dict = {"price": 0.0, "updated_at": None}
     "cf_count": 0, "cf_pass": False, "cf_dir": "neutral",
     "cf_status": "WAIT", "grid_level": 0.0, "close": 0.0,
     "ticker": "", "updated_at": None,
@@ -379,12 +379,9 @@ async def health(): return {"status":"ok","service":"DIAMOND TRADER","version":"
 
 @app.get("/price")
 async def get_price():
-    try:
-        async with httpx.AsyncClient(timeout=5) as c:
-            r = await c.get(f"{BINANCE_BASE}/ticker/price", params={"symbol":PAXG_SYMBOL})
-            return {"price": float(r.json()["price"]), "symbol": PAXG_SYMBOL}
-    except Exception as e:
-        return JSONResponse({"error":str(e)}, status_code=503)
+    if last_price["price"] > 0:
+        return {"price": last_price["price"], "symbol": "XAUUSD", "updated_at": last_price["updated_at"]}
+    return JSONResponse({"error": "price"}, status_code=503)
 
 @app.get("/cf-status")
 async def get_cf_status():
@@ -417,7 +414,8 @@ async def post_alert(request: Request):
         return {"status":"ok","type":"CF_UPDATE","cf_count":cf_state["cf_count"],
                 "display":_cf_display(cf_state["cf_count"],cf_state["cf_pass"],cf_state["cf_dir"])}
 
-    now = datetime.utcnow().isoformat()
+    last_price["price"] = float(body.get("close", body.get("price", 0)))
+    last_price["updated_at"] = datetime.utcnow().isoformat()
     conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
     conn.execute("INSERT INTO alerts (timestamp,ticker,interval,pattern,direction,price,verdict,raw) VALUES (?,?,?,?,?,?,?,?)",
         (now, body.get("ticker","XAUUSD"), body.get("interval",""),
