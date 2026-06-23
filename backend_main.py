@@ -415,8 +415,9 @@ async def post_alert(request: Request):
         return {"status":"ok","type":"CF_UPDATE","cf_count":cf_state["cf_count"],
                 "display":_cf_display(cf_state["cf_count"],cf_state["cf_pass"],cf_state["cf_dir"])}
 
-    last_price["price"] = float(body.get("close", body.get("price", 0)))
-    last_price["updated_at"] = datetime.utcnow().isoformat()
+    now = datetime.utcnow().isoformat()
+        last_price["price"] = float(body.get("close", body.get("price", 0)))
+        last_price["updated_at"] = now
     conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
     conn.execute("INSERT INTO alerts (timestamp,ticker,interval,pattern,direction,price,verdict,raw) VALUES (?,?,?,?,?,?,?,?)",
         (now, body.get("ticker","XAUUSD"), body.get("interval",""),
