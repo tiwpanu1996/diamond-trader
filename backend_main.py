@@ -245,7 +245,7 @@ function updateTfCard(interval, d) {
 
 function updateExec(d) {
   const v = document.getElementById('verdict-box');
-  const price = parseFloat(d.price || 0);
+  const price = parseFloat(d.close || d.price || 0);
   document.getElementById('ex-pattern').textContent = d.pattern || '—';
   document.getElementById('ex-entry').textContent = price ? price.toFixed(2) : '—';
   if (d.direction === 'BUY') {
