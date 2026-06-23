@@ -278,7 +278,8 @@ async def health():
 async def get_price():
     if last_price["price"] > 0:
         return {"price": last_price["price"], "symbol": "XAUUSD", "updated_at": last_price["updated_at"]}
-    return JSONResponse({"error": "price"}, status_code=503)
+    # ราคายังไม่มี — รอ PA_SIGNAL webhook แรกจาก Pine
+    return {"price": 0, "symbol": "XAUUSD", "status": "waiting_signal", "updated_at": None}
 
 @app.get("/cf-status")
 async def get_cf_status():
