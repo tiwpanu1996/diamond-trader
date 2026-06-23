@@ -229,6 +229,27 @@ async def cleanup_breakout():
                     pass
         await asyncio.sleep(60)
 
+async def cleanup_old_alerts():
+    """E2: ลบ alerts เก่า — เก็บแค่ 500 rows ล่าสุด, รันทุก 30 นาที"""
+    while True:
+        await asyncio.sleep(1800)  # รอ 30 นาทีก่อน (ไม่ cleanup ตอนเริ่ม)
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
+            # นับ rows ปัจจุบัน
+            count = conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+            if count > 500:
+                # ลบ rows เก่าเกิน 500
+                conn.execute("""
+                    DELETE FROM alerts WHERE id NOT IN (
+                        SELECT id FROM alerts ORDER BY id DESC LIMIT 500
+                    )
+                """)
+                deleted = count - 500
+                conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
 @asynccontextmanager
 async def lifespan(app):
     init_db()
@@ -236,6 +257,7 @@ async def lifespan(app):
     asyncio.create_task(fetch_usdthb())
     asyncio.create_task(fetch_economic_news())
     asyncio.create_task(cleanup_breakout())
+    asyncio.create_task(cleanup_old_alerts())
     yield
 
 app = FastAPI(title="DIAMOND TRADER v3.0", lifespan=lifespan)
