@@ -1,0 +1,89 @@
+<!-- ═══════════════════════════════════════════════════════════
+  CF M5 COUNTER — Dashboard Addon
+  SSOT: SNIPER_HUD_BIBLE_v1.1 §3.1
+  
+  วิธีใช้:
+  1. เพิ่ม HTML block ด้านล่างในส่วน Filter bar ของ dashboard
+  2. เพิ่ม <script> block ในส่วน JS ของ dashboard
+  ══════════════════════════════════════════════════════════ -->
+
+<!-- ── HTML: CF M5 Counter Card (วางใน Filter bar) ── -->
+<div id="cf-card" class="filter-card">
+  <div class="filter-label">CF M5</div>
+  <div id="cf-display" class="cf-display">— 0/3</div>
+  <div id="cf-grid"    class="cf-sub">Grid: —</div>
+  <div id="cf-updated" class="cf-sub">–</div>
+</div>
+
+<style>
+/* CF M5 Counter Styles */
+.cf-display {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--color-wait, #f59e0b);    /* default = รอ (เหลือง) */
+  transition: color 0.3s ease;
+}
+.cf-display.ready  { color: var(--color-ready, #22c55e); }   /* ✓ READY = เขียว */
+.cf-display.wait   { color: var(--color-wait,  #f59e0b); }   /* ⏳ WAIT  = เหลือง */
+.cf-display.none   { color: var(--color-none,  #6b7280); }   /* — ว่าง   = เทา */
+.cf-sub {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+</style>
+
+<script>
+// ── CF M5 Polling (ทุก 3 วิ ตาม HTTP polling ของโปรเจค) ──────────
+const CF_POLL_MS = 3000
+const CF_API     = '/cf-status'   // relative URL (same origin)
+
+let cfPollTimer = null
+
+function updateCfDisplay(data) {
+  const el       = document.getElementById('cf-display')
+  const gridEl   = document.getElementById('cf-grid')
+  const updEl    = document.getElementById('cf-updated')
+
+  if (!el) return
+
+  // ── Text ──
+  el.textContent = data.display || '— 0/3'
+
+  // ── Color class ──
+  el.className = 'cf-display'
+  if (data.cf_pass)          el.classList.add('ready')
+  else if (data.cf_count > 0) el.classList.add('wait')
+  else                        el.classList.add('none')
+
+  // ── Sub-info ──
+  if (gridEl) {
+    const grid = data.grid_level ? `Grid: ${data.grid_level.toFixed(2)}` : 'Grid: —'
+    gridEl.textContent = grid
+  }
+  if (updEl && data.updated_at) {
+    const t = new Date(data.updated_at + 'Z')
+    updEl.textContent = t.toLocaleTimeString('th-TH', { hour12: false })
+  }
+}
+
+async function pollCfStatus() {
+  try {
+    const res  = await fetch(CF_API)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    updateCfDisplay(data)
+  } catch (err) {
+    // ถ้า backend ไม่ตอบ → แสดงค่าว่างเงียบๆ (ไม่ error popup)
+    console.warn('[CF] poll error:', err.message)
+  } finally {
+    cfPollTimer = setTimeout(pollCfStatus, CF_POLL_MS)
+  }
+}
+
+// ── Start polling เมื่อ page โหลด ──────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  pollCfStatus()
+})
+</script>

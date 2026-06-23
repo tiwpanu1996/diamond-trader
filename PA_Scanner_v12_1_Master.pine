@@ -1,0 +1,402 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+// © DIAMOND TRADER — PA Scanner v12 Master (Webhook JSON Integrated)
+// ─────────────────────────────────────────────────────────────────────────────
+// v12.1 Fixes (PA_SPEC_MASTER_v2.1):
+//   [FIX 1] midCombined: Buy = open[3]-(b3+b2)/2 | Sell = open[3]+(b3+b2)/2
+//   [FIX 2] Pat3.1 doji: body[k2] < 0.15×body[k3] (ไม่ใช้ ATR)
+//   [FIX 3] Alert JSON: "tf"→"interval", "price"→"close", เพิ่ม "type"
+//   [NEW]   CF M5 Addon ต่อท้าย (ส่ง CF_UPDATE webhook)
+// ─────────────────────────────────────────────────────────────────────────────
+
+//@version=6
+indicator("DIAMOND TRADER — PA Scanner v12 Master", overlay=true, max_labels_count=500)
+
+// ============================================================
+//  SECTION 0: INPUTS & SETTINGS
+// ============================================================
+grp_p        = "Pattern Settings"
+wick_mult    = input.float(2.0,   "Pin Bar: ไส้ยาวกว่าเนื้อกี่เท่า", minval=1.0,  step=0.1,  group=grp_p)
+close_frac   = input.float(0.25,  "Pin Bar: ปิดใน 1/N ของ High-Low",  minval=0.05, step=0.05, group=grp_p)
+engulf_ratio = input.float(0.5,   "Pat2: Engulf ratio (body[0]>=N*body[-1])", minval=0.3, step=0.05, group=grp_p)
+
+grp_g        = "Execution Filters"
+i_spreadNow  = input.int(160,     "Spread ปัจจุบัน (points)",    group=grp_g)
+i_spreadMax  = input.int(350,     "Spread Max (points)",          group=grp_g)
+
+grp_l        = "Label Settings"
+show_lbl     = input.bool(true,   "แสดง Label บนกราฟชาร์ต", group=grp_l)
+lbl_sz       = input.string("small", "ขนาด Label", options=["tiny","small","normal","large"], group=grp_l)
+
+grp_d        = "Dashboard Settings"
+show_dash    = input.bool(true,   "แสดง Dashboard", group=grp_d)
+dash_pos     = input.string("Bottom Right", "ตำแหน่ง Dashboard",
+                 options=["Bottom Right","Bottom Left","Top Right","Top Left"], group=grp_d)
+
+// ============================================================
+//  COLORS (Modern Dark Theme - Style v12)
+// ============================================================
+C_GREEN  = color.new(#3fb950, 0)
+C_RED    = color.new(#f85149, 0)
+C_GRAY   = color.new(#ffffff, 40)
+C_HEADER = color.white
+C_BLUE   = color.new(#58a6ff, 0)
+
+BG_MAIN  = color.new(#0d1117, 0)
+BG_HDR   = color.new(#161b22, 0)
+BG_SEP   = color.new(#161b22, 0)
+BG_BUY   = color.new(#0a1a0f, 0)
+BG_SELL  = color.new(#1a0a0a, 0)
+BG_FOOT  = color.new(#161b22, 0)
+
+// ============================================================
+//  HELPERS
+// ============================================================
+get_tcol(v) =>
+    v > 0 ? C_GREEN : v < 0 ? C_RED : C_GRAY
+
+get_bgrow(v) =>
+    v > 0 ? BG_BUY : v < 0 ? BG_SELL : BG_MAIN
+
+get_sz() =>
+    sz = size.small
+    if lbl_sz == "tiny"
+        sz := size.tiny
+    else if lbl_sz == "normal"
+        sz := size.normal
+    else if lbl_sz == "large"
+        sz := size.large
+    sz
+
+get_pat_name(v) =>
+    n = "─  No Pattern"
+    if v == 1
+        n := "▲  PA BUY P.1"
+    else if v == 2
+        n := "▲  PA BUY P.2"
+    else if v == 3
+        n := "▲  PA BUY P.3.1"
+    else if v == 4
+        n := "▲  PA BUY P.3.2"
+    else if v == 5
+        n := "▲  PA BUY P.3.3"
+    else if v == -1
+        n := "▼  PA SALE P.1"
+    else if v == -2
+        n := "▼  PA SALE P.2"
+    else if v == -3
+        n := "▼  PA SALE P.3.1"
+    else if v == -4
+        n := "▼  PA SALE P.3.2"
+    else if v == -5
+        n := "▼  PA SALE P.3.3"
+    n
+
+// ============================================================
+//  CORE DETECTION ENGINE — v12.1 (PA_SPEC_MASTER_v2.1)
+// ============================================================
+f_detect() =>
+    _o0 = open
+    _h0 = high
+    _l0 = low
+    _c0 = close
+    _o1 = open[1]
+    _l1 = low[1]
+    _c1 = close[1]
+    _o2 = open[2]
+    _c2 = close[2]
+
+    _b0 = math.abs(_o0 - _c0)
+    _b1 = math.abs(_o1 - _c1)
+    _b2 = math.abs(_o2 - _c2)
+    _wu = _h0 - math.max(_o0, _c0)
+    _wd = math.min(_o0, _c0) - _l0
+
+    // midBody ของ k2 [1] → ใช้ใน Pat2
+    _mp2 = (_o1 + _c1) / 2.0
+
+    // midBody ของ k3 [2] → ใช้ใน Pat3.3
+    _mp2_2 = (_o2 + _c2) / 2.0
+
+    // ── [FIX 1] midCombined v2.1 — แยก Buy/Sell ──────────────────
+    // Buy:  open[k3] - (body[k3]+body[k2]) / 2  (k3=[2], k2=[1] ในโค้ดนี้)
+    // Sell: open[k3] + (body[k3]+body[k2]) / 2
+    _midCombBuy  = _o2 - (_b2 + _b1) / 2.0
+    _midCombSell = _o2 + (_b2 + _b1) / 2.0
+
+    // ── Color / Direction flags ───────────────────────────────────
+    _bull0 = _c0 >= _o0
+    _bear0 = _c0 <  _o0
+    _bull1 = _c1 >= _o1
+    _bear1 = _c1 <  _o1
+    _bull2 = _c2 >= _o2
+    _bear2 = _c2 <  _o2
+
+    // ── Pat1 — Pin Bar shape (§2.6) ──────────────────────────────
+    _pin_buy = _b0 > 0 and _wd >= wick_mult * _b0 and _wu <= 0.5 * _b0 and _c0 >= _h0 - close_frac * (_h0 - _l0)
+    _pin_sel = _b0 > 0 and _wu >= wick_mult * _b0 and _wd <= 0.5 * _b0 and _c0 <= _l0 + close_frac * (_h0 - _l0)
+
+    // ── Pat2 — Engulf midBody ─────────────────────────────────────
+    _p2_buy = _b0 > 0 and _bear1 and _bull0 and _b0 >= engulf_ratio * _b1 and _c0 > _mp2
+    _p2_sel = _b0 > 0 and _bull1 and _bear0 and _b0 >= engulf_ratio * _b1 and _c0 < _mp2
+
+    // ── [FIX 2] Pat3.1 — Doji ────────────────────────────────────
+    // is_small = body[k2] < 0.15 × body[k3]  (ไม่ใช้ ATR)
+    _doji    = _b2 > 0 and _b1 < 0.15 * _b2
+    _p31_buy = _bear2 and _doji and _bull0 and _c0 > _midCombBuy
+    _p31_sel = _bull2 and _doji and _bear0 and _c0 < _midCombSell
+
+    // ── Pat3.2 — k2 สีเดียวกับ k3, NOT small ─────────────────────
+    _notsmall = _b2 > 0 and _b1 >= 0.15 * _b2
+    _p32_buy  = _bear2 and _bear1 and _notsmall and _bull0 and _c0 > _midCombBuy
+    _p32_sel  = _bull2 and _bull1 and _notsmall and _bear0 and _c0 < _midCombSell
+
+    // ── Pat3.3 — k2 สีตรงข้าม k3, NOT small, Sig เกิน mid(k3) ───
+    _p33_buy = _bear2 and _bull1 and _notsmall and _bull0 and _c0 > _mp2_2
+    _p33_sel = _bull2 and _bear1 and _notsmall and _bear0 and _c0 < _mp2_2
+
+    // ── Priority: Pat3 → Pat2 → Pat1 (§2.7) ─────────────────────
+    _r = 0
+    if _p31_buy
+        _r := 3
+    else if _p32_buy
+        _r := 4
+    else if _p33_buy
+        _r := 5
+    else if _p2_buy
+        _r := 2
+    else if _pin_buy
+        _r := 1
+    else if _p31_sel
+        _r := -3
+    else if _p32_sel
+        _r := -4
+    else if _p33_sel
+        _r := -5
+    else if _p2_sel
+        _r := -2
+    else if _pin_sel
+        _r := -1
+    _r
+
+// ============================================================
+//  MULTI-TIMEFRAME DATA FETCHING (Anti-Repaint)
+// ============================================================
+f_get_tf_data(tf_string) =>
+    request.security(syminfo.tickerid, tf_string, f_detect()[1], lookahead=barmerge.lookahead_off)
+
+tf_mn  = f_get_tf_data("M")
+tf_w   = f_get_tf_data("W")
+tf_d   = f_get_tf_data("D")
+tf_4h  = f_get_tf_data("240")
+tf_1h  = f_get_tf_data("60")
+tf_30m = f_get_tf_data("30")
+tf_15m = f_get_tf_data("15")
+tf_5m  = f_get_tf_data("5")
+tf_1m  = f_get_tf_data("1")
+
+// ── Persistent Memory ─────────────────────────────────────────
+var int mem_mn  = 0
+var int mem_w   = 0
+var int mem_d   = 0
+var int mem_4h  = 0
+var int mem_1h  = 0
+var int mem_30m = 0
+var int mem_15m = 0
+var int mem_5m  = 0
+var int mem_1m  = 0
+
+if tf_mn != 0
+    mem_mn := tf_mn
+if tf_w != 0
+    mem_w := tf_w
+if tf_d != 0
+    mem_d := tf_d
+if tf_4h != 0
+    mem_4h := tf_4h
+if tf_1h != 0
+    mem_1h := tf_1h
+if tf_30m != 0
+    mem_30m := tf_30m
+if tf_15m != 0
+    mem_15m := tf_15m
+if tf_5m != 0
+    mem_5m := tf_5m
+if tf_1m != 0
+    mem_1m := tf_1m
+
+// ============================================================
+//  CURRENT TF LABELS
+// ============================================================
+cur      = f_detect()
+spreadOK = i_spreadNow <= i_spreadMax
+
+if show_lbl and cur != 0 and barstate.isconfirmed and spreadOK
+    isBuy = cur > 0
+
+    string cleanTxt = ""
+    if cur == 1
+        cleanTxt := "▲ Buy P.1"
+    else if cur == 2
+        cleanTxt := "▲ Buy P.2"
+    else if cur == 3
+        cleanTxt := "▲ Buy P.3.1"
+    else if cur == 4
+        cleanTxt := "▲ Buy P.3.2"
+    else if cur == 5
+        cleanTxt := "▲ Buy P.3.3"
+    else if cur == -1
+        cleanTxt := "▼ Sale P.1"
+    else if cur == -2
+        cleanTxt := "▼ Sale P.2"
+    else if cur == -3
+        cleanTxt := "▼ Sale P.3.1"
+    else if cur == -4
+        cleanTxt := "▼ Sale P.3.2"
+    else if cur == -5
+        cleanTxt := "▼ Sale P.3.3"
+
+    color lblColor = isBuy ? color.new(C_GREEN, 10) : color.new(C_RED, 10)
+    labelStyle     = isBuy ? label.style_label_up : label.style_label_down
+    labelY         = isBuy ? low : high
+
+    label.new(bar_index, labelY, cleanTxt, color=lblColor, textcolor=color.white, style=labelStyle, size=get_sz())
+
+// ============================================================
+//  CONFLUENCE MATRIX
+// ============================================================
+bull_count = (mem_mn>0?1:0)+(mem_w>0?1:0)+(mem_d>0?1:0)+(mem_4h>0?1:0)+(mem_1h>0?1:0)+(mem_30m>0?1:0)+(mem_15m>0?1:0)+(mem_5m>0?1:0)+(mem_1m>0?1:0)
+bear_count = (mem_mn<0?1:0)+(mem_w<0?1:0)+(mem_d<0?1:0)+(mem_4h<0?1:0)+(mem_1h<0?1:0)+(mem_30m<0?1:0)+(mem_15m<0?1:0)+(mem_5m<0?1:0)+(mem_1m<0?1:0)
+
+// ============================================================
+//  DASHBOARD
+// ============================================================
+_dpos = dash_pos == "Bottom Left" ? position.bottom_left : dash_pos == "Top Right" ? position.top_right : dash_pos == "Top Left" ? position.top_left : position.bottom_right
+
+var table dash = table.new(_dpos, 2, 16, bgcolor=BG_MAIN, border_width=1, border_color=color.new(#21262d, 0), frame_width=1, frame_color=color.new(#21262d, 0))
+
+if barstate.islast and show_dash
+    table.cell(dash, 0, 0, "DIAMOND TRADER v12.1", text_color=C_BLUE, bgcolor=BG_MAIN, text_size=size.normal, text_halign=text.align_left)
+    table.merge_cells(dash, 0, 0, 1, 0)
+
+    table.cell(dash, 0, 1, "TF",             text_color=C_HEADER, bgcolor=BG_HDR, text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 1, "Pattern Status", text_color=C_HEADER, bgcolor=BG_HDR, text_size=size.small, text_halign=text.align_left)
+
+    table.cell(dash, 0, 2, "Weekly / LongTerm", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 2, 1, 2)
+    table.cell(dash, 0, 3, "MN", text_color=get_tcol(mem_mn),  bgcolor=get_bgrow(mem_mn),  text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 3, get_pat_name(mem_mn),  text_color=get_tcol(mem_mn),  bgcolor=get_bgrow(mem_mn),  text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 4, "W",  text_color=get_tcol(mem_w),   bgcolor=get_bgrow(mem_w),   text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 4, get_pat_name(mem_w),   text_color=get_tcol(mem_w),   bgcolor=get_bgrow(mem_w),   text_size=size.small, text_halign=text.align_left)
+
+    table.cell(dash, 0, 5, "Daily Framework", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 5, 1, 5)
+    table.cell(dash, 0, 6, "D",  text_color=get_tcol(mem_d),   bgcolor=get_bgrow(mem_d),   text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 6, get_pat_name(mem_d),   text_color=get_tcol(mem_d),   bgcolor=get_bgrow(mem_d),   text_size=size.small, text_halign=text.align_left)
+
+    table.cell(dash, 0, 7, "Intraday Structure", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 7, 1, 7)
+    table.cell(dash, 0, 8, "4H", text_color=get_tcol(mem_4h),  bgcolor=get_bgrow(mem_4h),  text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 8, get_pat_name(mem_4h),  text_color=get_tcol(mem_4h),  bgcolor=get_bgrow(mem_4h),  text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 9, "1H", text_color=get_tcol(mem_1h),  bgcolor=get_bgrow(mem_1h),  text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 9, get_pat_name(mem_1h),  text_color=get_tcol(mem_1h),  bgcolor=get_bgrow(mem_1h),  text_size=size.small, text_halign=text.align_left)
+
+    table.cell(dash, 0, 10, "Sniper Entry Zones", text_color=C_GRAY, bgcolor=BG_SEP, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 10, 1, 10)
+    table.cell(dash, 0, 11, "30M", text_color=get_tcol(mem_30m), bgcolor=get_bgrow(mem_30m), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 11, get_pat_name(mem_30m), text_color=get_tcol(mem_30m), bgcolor=get_bgrow(mem_30m), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 12, "15M", text_color=get_tcol(mem_15m), bgcolor=get_bgrow(mem_15m), text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 12, get_pat_name(mem_15m), text_color=get_tcol(mem_15m), bgcolor=get_bgrow(mem_15m), text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 13, "5M",  text_color=get_tcol(mem_5m),  bgcolor=get_bgrow(mem_5m),  text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 13, get_pat_name(mem_5m),  text_color=get_tcol(mem_5m),  bgcolor=get_bgrow(mem_5m),  text_size=size.small, text_halign=text.align_left)
+    table.cell(dash, 0, 14, "1M",  text_color=get_tcol(mem_1m),  bgcolor=get_bgrow(mem_1m),  text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 14, get_pat_name(mem_1m),  text_color=get_tcol(mem_1m),  bgcolor=get_bgrow(mem_1m),  text_size=size.small, text_halign=text.align_left)
+
+    table.cell(dash, 0, 15, "BULLISH: " + str.tostring(bull_count), text_color=C_GREEN, bgcolor=BG_FOOT, text_size=size.small, text_halign=text.align_center)
+    table.cell(dash, 1, 15, "BEARISH: " + str.tostring(bear_count), text_color=C_RED,   bgcolor=BG_FOOT, text_size=size.small, text_halign=text.align_center)
+
+// ============================================================
+//  ALERTS — PA SIGNAL WEBHOOK (JSON ตรง backend_main v2.1)
+//  [FIX 3] "tf" → "interval" | "price" → "close" | เพิ่ม "type"
+// ============================================================
+f_make_json(patName, dirName) =>
+    '{"type":"PA_SIGNAL","ticker":"' + syminfo.ticker + '","interval":"' + timeframe.period + '","pattern":"' + patName + '","direction":"' + dirName + '","close":' + str.tostring(close, "#.##") + ',"verdict":"WAIT"}'
+
+if cur != 0 and barstate.isconfirmed and spreadOK
+    string pName = "None"
+    if cur == 1 or cur == -1
+        pName := "Pat1"
+    else if cur == 2 or cur == -2
+        pName := "Pat2"
+    else if cur == 3 or cur == -3
+        pName := "Pat3.1"
+    else if cur == 4 or cur == -4
+        pName := "Pat3.2"
+    else if cur == 5 or cur == -5
+        pName := "Pat3.3"
+
+    string dName = cur > 0 ? "BUY" : "SELL"
+    alert(f_make_json(pName, dName), alert.freq_once_per_bar_close)
+
+// ============================================================
+//  CF M5 ADDON — DIAMOND TRADER v2.1
+//  SSOT: SNIPER_HUD_BIBLE_v1.1 §3.1
+//  นับแท่ง M5 ปิดยืนฝั่ง grid ติดกัน → ส่ง CF_UPDATE webhook
+//  ⚠️ ใช้ alert() เดิม — ไม่ต้องตั้ง Alert ใหม่ใน TradingView
+//     (alert ที่ตั้งไว้แล้วจะรับ CF_UPDATE อัตโนมัติ)
+// ============================================================
+
+// Grid ที่ใกล้ที่สุด (ทุก 5.00 USD)
+float cf_nearestGrid = math.round(close / 5.0) * 5.0
+
+// ดึง M5 close และ M5 grid (lookahead_off กัน repaint)
+float m5Close = request.security(
+     syminfo.tickerid,
+     "5",
+     close[1],
+     lookahead = barmerge.lookahead_off
+     )
+
+float m5Grid = request.security(
+     syminfo.tickerid,
+     "5",
+     math.round(close[1] / 5.0) * 5.0,
+     lookahead = barmerge.lookahead_off
+     )
+
+// CF State (คงค่าข้ามแท่ง)
+var int cfCount     = 0
+var int cfDir       = 0        // 1=buy  -1=sell  0=neutral
+var int cfCountPrev = 0
+
+// นับทุก confirmed bar
+if barstate.isconfirmed
+    bool m5BuySide  = m5Close > m5Grid
+    bool m5SellSide = m5Close < m5Grid
+
+    if m5BuySide
+        if cfDir == 1
+            cfCount := cfCount + 1
+        else
+            cfCount := 1
+            cfDir   := 1
+    else if m5SellSide
+        if cfDir == -1
+            cfCount := cfCount + 1
+        else
+            cfCount := 1
+            cfDir   := -1
+    else
+        cfCount := 0
+        cfDir   := 0
+
+// CF pass (≥3 ตาม spec §3.1)
+bool cfPass    = cfCount >= 3
+bool cfChanged = cfCount != cfCountPrev
+
+// ส่ง CF_UPDATE เฉพาะเมื่อ count เปลี่ยน (ไม่ spam ทุก bar)
+if barstate.isconfirmed and cfChanged
+    string cfDirStr = cfDir == 1 ? "buy" : cfDir == -1 ? "sell" : "neutral"
+    string cfStatus = cfPass ? "READY" : "WAIT"
+    string cfJson = '{"type":"CF_UPDATE","ticker":"' + syminfo.ticker + '","interval":"' + timeframe.period + '","cf_count":' + str.tostring(cfCount) + ',"cf_pass":' + (cfPass ? "true" : "false") + ',"cf_dir":"' + cfDirStr + '","cf_status":"' + cfStatus + '","grid_level":' + str.tostring(m5Grid, "#.##") + ',"close":' + str.tostring(m5Close, "#.##") + '}'
+    alert(cfJson, alert.freq_once_per_bar_close)
+    cfCountPrev := cfCount
