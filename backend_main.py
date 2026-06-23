@@ -56,6 +56,12 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_time TEXT, title TEXT, currency TEXT,
         impact TEXT, fetched_at TEXT)""")
+    # Migration: เพิ่มคอลัมน์ pattern ถ้ายังไม่มี (DB เก่าบน Railway)
+    try:
+        conn.execute("ALTER TABLE alerts ADD COLUMN pattern TEXT")
+        log.info("Migration: added column 'pattern' to alerts")
+    except Exception:
+        pass  # คอลัมน์มีอยู่แล้ว = ข้ามได้
     conn.commit()
     conn.close()
 
