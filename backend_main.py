@@ -19,8 +19,6 @@ logging.basicConfig(
 log = logging.getLogger("diamond")
 
 DB_PATH      = os.getenv("DB_PATH", "diamond_trader.db")
-BYBIT_BASE   = "https://api.bybit.com/v5/market/tickers"
-XAU_SYMBOL   = "XAUUSDT"
 FINNHUB_KEY  = os.getenv("FINNHUB_KEY", "")  # optional — free tier
 
 # ── In-memory state ──────────────────────────────────────────────
@@ -150,26 +148,9 @@ def _zone_tag(width):
 
 
 # ── Background Tasks ─────────────────────────────────────────────
-async def fetch_paxg_price():
-    """ดึงราคา XAUUSDT จาก Bybit spot (แทน Binance ที่ถูกบล็อก HTTP 451)
-    Fallback: ถ้า Bybit ไม่ตอบ → ใช้ราคาจาก PA_SIGNAL ที่รับเข้ามาแทน
-    """
-    while True:
-        try:
-            async with httpx.AsyncClient(timeout=5) as c:
-                r = await c.get(
-                    BYBIT_BASE,
-                    params={"category": "spot", "symbol": XAU_SYMBOL}
-                )
-                data = r.json()
-                price_str = data["result"]["list"][0]["lastPrice"]
-                price_val = float(price_str)
-                if price_val > 0:
-                    last_price["price"]      = price_val
-                    last_price["updated_at"] = datetime.utcnow().isoformat()
-        except Exception as e:
-            log.warning("fetch_xau_bybit: %s | using PA_SIGNAL price as fallback", e)
-        await asyncio.sleep(10)
+# ราคา XAU อัปเดตจาก PA_SIGNAL webhook (TradingView) โดยตรง
+# ไม่ดึงจาก external API เพื่อหลีกเลี่ยง IP geo-restriction
+# last_price["price"] จะถูก set ใน POST /alerts ทุกครั้งที่ Pine ยิง webhook
 
 async def fetch_usdthb():
     while True:
@@ -278,7 +259,6 @@ async def cleanup_old_alerts():
 @asynccontextmanager
 async def lifespan(app):
     init_db()
-    asyncio.create_task(fetch_paxg_price())
     asyncio.create_task(fetch_usdthb())
     asyncio.create_task(fetch_economic_news())
     asyncio.create_task(cleanup_breakout())
@@ -422,8 +402,10 @@ async def post_alert(request: Request):
     # ── PA_SIGNAL (default) ──
     now = datetime.utcnow().isoformat()
     price_val = float(body.get("close", body.get("price", 0)))
-    last_price["price"]      = price_val
-    last_price["updated_at"] = now
+    # อัปราคา cache จาก webhook payload โดยตรง (ไม่พึ่ง external API)
+    if price_val > 0:
+        last_price["price"]      = price_val
+        last_price["updated_at"] = now
 
     # Update structure state from PA signal
     iv = body.get("interval", "")
