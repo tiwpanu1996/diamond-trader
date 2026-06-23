@@ -15,6 +15,7 @@ BINANCE_BASE = "https://api.binance.com/api/v3"
 PAXG_SYMBOL  = "PAXGUSDT"
 
 last_price: dict = {"price": 0.0, "updated_at": None}
+cf_state: dict = {
     "cf_count": 0, "cf_pass": False, "cf_dir": "neutral",
     "cf_status": "WAIT", "grid_level": 0.0, "close": 0.0,
     "ticker": "", "updated_at": None,
