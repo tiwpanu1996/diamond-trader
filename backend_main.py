@@ -22,18 +22,13 @@ cf_state: dict = {
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("""CREATE TABLE IF NOT EXISTS alerts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT,
-        ticker TEXT, interval TEXT, pattern TEXT, direction TEXT,
-        price REAL, verdict TEXT, raw TEXT)""")
-    conn.commit()
-    # Auto-migration: เพิ่ม column ที่ขาดใน schema เก่า
-    existing = [r[1] for r in conn.execute("PRAGMA table_info(alerts)")]
-    needed = ["timestamp","ticker","interval","pattern","direction","price","verdict","raw"]
-    for col in needed:
-        if col not in existing:
-            type_map = {"price": "REAL"}
-            conn.execute(f"ALTER TABLE alerts ADD COLUMN {col} {type_map.get(col,'TEXT')}")
+    # Drop table เก่าที่ schema ไม่ตรง แล้วสร้างใหม่
+    conn.execute("DROP TABLE IF EXISTS alerts")
+    conn.execute("""CREATE TABLE alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT,
+        ticker TEXT, interval TEXT, pattern TEXT,
+        direction TEXT, price REAL, verdict TEXT, raw TEXT)""")
     conn.commit()
     conn.close()
 
