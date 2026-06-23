@@ -19,8 +19,8 @@ logging.basicConfig(
 log = logging.getLogger("diamond")
 
 DB_PATH      = os.getenv("DB_PATH", "diamond_trader.db")
-BINANCE_BASE = "https://api.binance.com/api/v3"
-PAXG_SYMBOL  = "PAXGUSDT"
+BYBIT_BASE   = "https://api.bybit.com/v5/market/tickers"
+XAU_SYMBOL   = "XAUUSDT"
 FINNHUB_KEY  = os.getenv("FINNHUB_KEY", "")  # optional — free tier
 
 # ── In-memory state ──────────────────────────────────────────────
@@ -151,14 +151,24 @@ def _zone_tag(width):
 
 # ── Background Tasks ─────────────────────────────────────────────
 async def fetch_paxg_price():
+    """ดึงราคา XAUUSDT จาก Bybit spot (แทน Binance ที่ถูกบล็อก HTTP 451)
+    Fallback: ถ้า Bybit ไม่ตอบ → ใช้ราคาจาก PA_SIGNAL ที่รับเข้ามาแทน
+    """
     while True:
         try:
             async with httpx.AsyncClient(timeout=5) as c:
-                r = await c.get(f"{BINANCE_BASE}/ticker/price", params={"symbol": PAXG_SYMBOL})
-                last_price["price"]      = float(r.json()["price"])
-                last_price["updated_at"] = datetime.utcnow().isoformat()
+                r = await c.get(
+                    BYBIT_BASE,
+                    params={"category": "spot", "symbol": XAU_SYMBOL}
+                )
+                data = r.json()
+                price_str = data["result"]["list"][0]["lastPrice"]
+                price_val = float(price_str)
+                if price_val > 0:
+                    last_price["price"]      = price_val
+                    last_price["updated_at"] = datetime.utcnow().isoformat()
         except Exception as e:
-            log.warning("fetch_paxg: %s", e)
+            log.warning("fetch_xau_bybit: %s | using PA_SIGNAL price as fallback", e)
         await asyncio.sleep(10)
 
 async def fetch_usdthb():
