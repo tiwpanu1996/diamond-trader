@@ -21,7 +21,7 @@ cf_state: dict = {
 }
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
     # Drop table เก่าที่ schema ไม่ตรง แล้วสร้างใหม่
     conn.execute("DROP TABLE IF EXISTS alerts")
     conn.execute("""CREATE TABLE alerts (
@@ -392,7 +392,7 @@ async def get_cf_status():
 
 @app.get("/alerts")
 async def get_alerts(limit: int = 30):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
     rows = conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     conn.close()
     cols = ["id","timestamp","ticker","interval","pattern","direction","price","verdict","raw"]
@@ -418,7 +418,7 @@ async def post_alert(request: Request):
                 "display":_cf_display(cf_state["cf_count"],cf_state["cf_pass"],cf_state["cf_dir"])}
 
     now = datetime.utcnow().isoformat()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
     conn.execute("INSERT INTO alerts (timestamp,ticker,interval,pattern,direction,price,verdict,raw) VALUES (?,?,?,?,?,?,?,?)",
         (now, body.get("ticker","XAUUSD"), body.get("interval",""),
          body.get("pattern",body.get("type","UNKNOWN")), body.get("direction",""),
