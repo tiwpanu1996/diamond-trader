@@ -1,13 +1,16 @@
 """
-DIAMOND TRADER — backend_main.py v3.1.1
+DIAMOND TRADER — backend_main.py v3.2
 FastAPI + War Room HUD Dashboard (3-Zone Structure)
 SSOT: PA_SPEC_MASTER_v2.1 + SNIPER_HUD_BIBLE_v1.1
 
-Change Log v3.1 → v3.1.1:
-  - Fix: Verdict NO-TRADE fires when VIP OFF (OVL > 300 pts) per SSOT §3.6 filter order
-  - Fix: last_signal tracker populates Zone A pattern row (▲/▼ PatX [TF])
-  - Fix: JS vbox.className now handles 'no-trade' class correctly
-  - Fix: CF M5 default display '🔴 — 0/3' when no signal received
+Change Log v3.1.1 → v3.2:
+  - New: SW_UPDATE webhook type — receives regime data from Pine Script
+  - New: _classify_regime() — BOX/WIDE/TRIANGLE classifier per SSOT §3.2
+  - New: sw_state in-memory store — tracks per-interval Sideway state
+  - New: _compute_sideway_verdict() — aggregates regime across intervals
+  - New: Verdict auto-blocks to NO-TRADE when WIDE sideways detected §3.2
+  - New: Zone B Sideway card — BOX/WIDE/TRIANGLE display per interval
+  - New: /sw-state endpoint for debug
 """
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -48,6 +51,14 @@ news_cache: list = []
 last_signal: dict = {
     "pattern": "", "direction": "", "interval": "", "price": 0.0, "updated_at": None
 }
+
+# Sideway Detection state v3.2 — keyed by interval
+# regime: "TRENDING" | "BOX" | "WIDE" | "TRIANGLE"
+sw_state: dict = {}
+# sw_state[iv] = {
+#   "regime": str, "sw_high": float, "sw_low": float,
+#   "range_pts": int, "atr_pts": int, "updated_at": str
+# }
 
 # ── DB init ──────────────────────────────────────────────────────
 def init_db():
@@ -165,6 +176,75 @@ def _check_news_guard():
 def _zone_tag(width):
     if width <= 500: return "TIGHT_SL"
     return "WIDE_REFINE"
+
+# ── Sideway Detection v3.2 (SSOT §3.2) ───────────────────────────
+REGIME_WIDE_RATIO     = 1.5   # range/ATR > 1.5 + ทิศสลับ = WIDE
+REGIME_BOX_RATIO      = 1.2   # range/ATR > 1.2 = BOX (ออกข้าง)
+REGIME_TRIANGLE_SLOPE = 0.85  # range/ATR < 0.85 = TRIANGLE (หดตัว)
+
+def _classify_regime(range_pts: int, atr_pts: int, pine_regime: str = "") -> str:
+    """
+    Classify market regime per SSOT §3.2.
+    Pine Script regime label (if provided) takes priority.
+    Fallback: compute from range/ATR ratio.
+    """
+    # Pine label takes priority (Pine has full OHLC context)
+    if pine_regime in ("BOX", "WIDE", "TRIANGLE", "TRENDING"):
+        return pine_regime
+    # Fallback: backend ratio-based classification
+    if atr_pts <= 0:
+        return "TRENDING"
+    ratio = range_pts / atr_pts
+    if ratio > REGIME_WIDE_RATIO:
+        return "WIDE"
+    elif ratio > REGIME_BOX_RATIO:
+        return "BOX"
+    elif ratio < REGIME_TRIANGLE_SLOPE:
+        return "TRIANGLE"
+    return "TRENDING"
+
+def _compute_sideway_verdict() -> dict:
+    """
+    Aggregate regime across all intervals → overall sideway state.
+    Priority: any WIDE → block trade immediately (§3.2 §3.6)
+    Returns: {"regime": str, "block_trade": bool, "detail": list}
+    """
+    if not sw_state:
+        return {"regime": "UNKNOWN", "block_trade": False, "detail": []}
+
+    detail = []
+    has_wide = False
+    has_box = False
+    has_triangle = False
+
+    for iv, s in sw_state.items():
+        r = s.get("regime", "TRENDING")
+        detail.append({"interval": iv, "regime": r,
+                        "sw_high": s.get("sw_high", 0),
+                        "sw_low":  s.get("sw_low",  0),
+                        "range_pts": s.get("range_pts", 0),
+                        "atr_pts":   s.get("atr_pts",   0)})
+        if r == "WIDE":
+            has_wide = True
+        elif r == "BOX":
+            has_box = True
+        elif r == "TRIANGLE":
+            has_triangle = True
+
+    if has_wide:
+        overall = "WIDE"
+    elif has_triangle:
+        overall = "TRIANGLE"
+    elif has_box:
+        overall = "BOX"
+    else:
+        overall = "TRENDING"
+
+    return {
+        "regime":      overall,
+        "block_trade": has_wide,   # SSOT §3.2: WIDE = ❌ NO-TRADE
+        "detail":      detail,
+    }
 
 # ── Background Tasks ─────────────────────────────────────────────
 async def fetch_usdthb():
@@ -325,12 +405,17 @@ async def dashboard_state():
     # CF Display with color
     cf_display = _cf_display_v31(cf_state["cf_count"], cf_state["cf_pass"], cf_state["cf_dir"])
 
-    # Zone A verdict logic (v3.1) — per SSOT §3.6 filter order
-    # OVL > 300 = NO-TRADE regardless of CF
+    # Sideway regime v3.2
+    sw_verdict = _compute_sideway_verdict()
+
+    # Zone A verdict logic (v3.2) — per SSOT §3.6 filter order
+    # Filter order: News → OVL → WIDE Sideway → CF
     if news_guard.get("blocked"):
         verdict = "NEWS BLOCK"
     elif not vip_on and price > 0:
         verdict = "NO-TRADE"
+    elif sw_verdict["block_trade"]:
+        verdict = "NO-TRADE"        # SSOT §3.2: WIDE sideways = NO-TRADE
     elif cf_state["cf_pass"]:
         verdict = f"READY {cf_state['cf_dir'].upper()}"
     elif cf_state["cf_count"] > 0:
@@ -384,6 +469,7 @@ async def dashboard_state():
             "bull_count": bull,
             "bear_count": bear,
             "structure": structure_state,
+            "sideway": sw_verdict,
         },
         # ── ZONE C: EXECUTION METER ──
         "zone_c": {
@@ -467,6 +553,28 @@ async def post_alert(request: Request):
         log.info("ZONE_UPDATE %s [%s] %.2f—%.2f", zone["zone_type"], zone["interval"], zone["lower"], zone["upper"])
         return {"status":"ok","type":"ZONE_UPDATE","zone":zone}
 
+    # ── SW_UPDATE (Sideway Detection v3.2) ──
+    if msg_type == "SW_UPDATE":
+        iv = str(body.get("interval", ""))
+        if not iv:
+            return JSONResponse({"status": "error", "msg": "interval required"}, status_code=400)
+        range_pts  = int(body.get("range_pts", 0))
+        atr_pts    = int(body.get("atr_pts",   0))
+        pine_regime = str(body.get("regime", ""))
+        regime = _classify_regime(range_pts, atr_pts, pine_regime)
+        sw_state[iv] = {
+            "regime":    regime,
+            "sw_high":   float(body.get("sw_high",  0)),
+            "sw_low":    float(body.get("sw_low",   0)),
+            "range_pts": range_pts,
+            "atr_pts":   atr_pts,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        log.info("SW_UPDATE [%s] regime=%s range=%d atr=%d", iv, regime, range_pts, atr_pts)
+        sw_v = _compute_sideway_verdict()
+        return {"status": "ok", "type": "SW_UPDATE", "interval": iv,
+                "regime": regime, "block_trade": sw_v["block_trade"]}
+
     # ── PA_SIGNAL ──
     if msg_type == "PA_SIGNAL":
         price = float(body.get("close", body.get("price", 0)))
@@ -502,13 +610,18 @@ async def post_alert(request: Request):
 
     return JSONResponse({"status":"error","msg":"unknown type"}, status_code=400)
 
-# ── DASHBOARD HTML (v3.1 — Zone A/B/C Structure) ────────────────────────────────────────────────
+@app.get("/sw-state")
+async def get_sw_state():
+    """Debug: Show current Sideway Detection state v3.2"""
+    return {"sw_state": sw_state, "verdict": _compute_sideway_verdict()}
+
+# ── DASHBOARD HTML (v3.2 — Zone A/B/C + Sideway) ────────────────────────────────────────────────
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>💎 DIAMOND TRADER v3.1.1 — War Room</title>
+<title>💎 DIAMOND TRADER v3.2 — War Room</title>
 <style>
 :root{
   --bg: #0a0e27;
@@ -598,6 +711,23 @@ a{color:var(--cyan);text-decoration:none}
 #bias-now-box{padding:6px;background:rgba(0,230,118,.1);border-radius:4px;border-left:2px solid var(--green)}
 #bias-now-val{font-size:14px;font-weight:800;color:var(--green)}
 
+/* ── Sideway Regime v3.2 ─────────────────────────────────────────────────────── */
+#sw-regime-box{padding:10px;border-radius:4px;text-align:center;font-size:14px;font-weight:800;
+  border:2px solid var(--border);color:var(--muted);background:rgba(0,0,0,.2);margin-bottom:6px}
+#sw-regime-box.trending{background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green)}
+#sw-regime-box.box{background:rgba(79,195,247,.1);border-color:var(--cyan);color:var(--cyan)}
+#sw-regime-box.wide{background:rgba(255,82,82,.15);border-color:var(--red);color:var(--red)}
+#sw-regime-box.triangle{background:rgba(255,213,79,.1);border-color:var(--yellow);color:var(--yellow)}
+.sw-row{display:flex;justify-content:space-between;padding:4px;border-radius:3px;font-size:11px;
+  background:rgba(255,255,255,.02);margin-bottom:2px}
+.sw-iv{color:var(--muted);font-weight:700}
+.sw-regime{font-weight:800}
+.sw-regime.trending{color:var(--green)}
+.sw-regime.box{color:var(--cyan)}
+.sw-regime.wide{color:var(--red)}
+.sw-regime.triangle{color:var(--yellow)}
+.sw-pts{color:var(--muted2);font-size:10px}
+
 .struct-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .struct-cell{padding:4px;background:rgba(255,255,255,.02);border-radius:3px;font-size:10px;text-align:center;
   border:1px solid var(--border)}
@@ -664,7 +794,7 @@ a{color:var(--cyan);text-decoration:none}
 <body>
 
 <div id="topbar">
-  <div class="brand">💎 DIAMOND TRADER v3.1.1</div>
+  <div class="brand">💎 DIAMOND TRADER v3.2</div>
   <div class="topbar-item"><div id="ws-dot" class="dot"></div><span id="ws-status">CONNECTING</span></div>
   <div class="topbar-item">PAXG <div id="price-hud"><span id="paxg-price">—</span></div></div>
   <div class="topbar-item">GRID <span id="top-grid">—</span></div>
@@ -721,6 +851,16 @@ a{color:var(--cyan);text-decoration:none}
       <div class="tf-footer">
         <span class="tf-bull">▲ BULL: <span id="zb-bull">0</span></span>
         <span class="tf-bear">▼ BEAR: <span id="zb-bear">0</span></span>
+      </div>
+    </div>
+    
+    <!-- ── Sideway Regime v3.2 ── -->
+    <div class="card">
+      <div class="card-title">📊 Regime Detector v3.2 (§3.2)</div>
+      <div id="sw-regime-box" class="">— UNKNOWN</div>
+      <div id="sw-detail-rows"></div>
+      <div style="font-size:9px;color:var(--muted2);margin-top:4px;text-align:right">
+        🟢 TRENDING · 🔵 BOX · 🔴 WIDE(NO-TRADE) · 🟡 TRIANGLE(WAIT)
       </div>
     </div>
     
@@ -870,6 +1010,33 @@ function renderNews(news){
   });
 }
 
+// ── Sideway Regime v3.2 Renderer ──────────────────────────────────────────────────
+const REGIME_LABEL = {
+  "TRENDING":  "✅ TRENDING",
+  "BOX":       "🔵 BOX — PLAY EDGES",
+  "WIDE":      "🔴 WIDE — NO-TRADE",
+  "TRIANGLE":  "🟡 TRIANGLE — WAIT BREAK",
+  "UNKNOWN":   "⚪ — UNKNOWN",
+};
+function renderSideway(sw){
+  const box = document.getElementById('sw-regime-box');
+  const rows = document.getElementById('sw-detail-rows');
+  if(!sw){ box.textContent='⚪ — NO DATA'; box.className=''; return; }
+  const r = sw.regime || 'UNKNOWN';
+  box.textContent = REGIME_LABEL[r] || r;
+  box.className = r.toLowerCase();
+  if(!sw.detail||!sw.detail.length){ rows.innerHTML=''; return; }
+  rows.innerHTML='';
+  sw.detail.forEach(s=>{
+    const rc = (s.regime||'TRENDING').toLowerCase();
+    rows.innerHTML+=`<div class="sw-row">
+      <span class="sw-iv">${s.interval}</span>
+      <span class="sw-regime ${rc}">${s.regime||'—'}</span>
+      <span class="sw-pts">${s.range_pts||0}/${s.atr_pts||0} pts</span>
+    </div>`;
+  });
+}
+
 function addAlert(d, prepend){
   const list=document.getElementById('zb-alerts');
   const el=document.createElement('div');
@@ -997,6 +1164,7 @@ async function pollState(){
     document.getElementById('zb-bull').textContent=d.bull_count||0;
     document.getElementById('zb-bear').textContent=d.bear_count||0;
     renderNews(d.news);
+    renderSideway((d.zone_b||{}).sideway||null);
     
     // Zone C
     updateOvl(d.ovl_pts);
