@@ -1,13 +1,13 @@
 """
-DIAMOND TRADER — backend_main.py v3.1
+DIAMOND TRADER — backend_main.py v3.1.1
 FastAPI + War Room HUD Dashboard (3-Zone Structure)
 SSOT: PA_SPEC_MASTER_v2.1 + SNIPER_HUD_BIBLE_v1.1
 
-Change Log v3.0 → v3.1:
-  - Restructured Dashboard: COL1/2/3 → Zone A (SNIPER SIGNALS) / Zone B (MARKET FLOW) / Zone C (EXECUTION METER)
-  - Enhanced CF M5 display: direction + color_state (GREEN/YELLOW/RED) per SSOT §3.1
-  - Zone A verdict logic: READY / WAIT / NO-TRADE per §4
-  - Added color_state field to cf_state response
+Change Log v3.1 → v3.1.1:
+  - Fix: Verdict NO-TRADE fires when VIP OFF (OVL > 300 pts) per SSOT §3.6 filter order
+  - Fix: last_signal tracker populates Zone A pattern row (▲/▼ PatX [TF])
+  - Fix: JS vbox.className now handles 'no-trade' class correctly
+  - Fix: CF M5 default display '🔴 — 0/3' when no signal received
 """
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -43,6 +43,11 @@ structure_state: dict = {}
 zones: list = []
 news_guard: dict = {"blocked": False, "reason": "", "unblock_at": None}
 news_cache: list = []
+
+# Last PA signal for Zone A pattern display
+last_signal: dict = {
+    "pattern": "", "direction": "", "interval": "", "price": 0.0, "updated_at": None
+}
 
 # ── DB init ──────────────────────────────────────────────────────
 def init_db():
@@ -270,13 +275,13 @@ async def lifespan(app):
     asyncio.create_task(cleanup_old_alerts())
     yield
 
-app = FastAPI(title="DIAMOND TRADER v3.1", lifespan=lifespan)
+app = FastAPI(title="DIAMOND TRADER v3.1.1", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ── API Endpoints ─────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "DIAMOND TRADER", "version": "3.1"}
+    return {"status": "ok", "service": "DIAMOND TRADER", "version": "3.1.1"}
 
 @app.get("/price")
 async def get_price():
@@ -320,12 +325,18 @@ async def dashboard_state():
     # CF Display with color
     cf_display = _cf_display_v31(cf_state["cf_count"], cf_state["cf_pass"], cf_state["cf_dir"])
 
-    # Zone A verdict logic (v3.1)
-    verdict = "NEWS BLOCK" if news_guard.get("blocked") else "STANDBY"
-    if cf_state["cf_pass"] and not news_guard.get("blocked"):
+    # Zone A verdict logic (v3.1) — per SSOT §3.6 filter order
+    # OVL > 300 = NO-TRADE regardless of CF
+    if news_guard.get("blocked"):
+        verdict = "NEWS BLOCK"
+    elif not vip_on and price > 0:
+        verdict = "NO-TRADE"
+    elif cf_state["cf_pass"]:
         verdict = f"READY {cf_state['cf_dir'].upper()}"
-    elif cf_state["cf_count"] > 0 and not cf_state["cf_pass"]:
+    elif cf_state["cf_count"] > 0:
         verdict = "WAIT"
+    else:
+        verdict = "STANDBY"
 
     # Active zone proximity
     zone_proximity = []
@@ -362,6 +373,9 @@ async def dashboard_state():
             "vip_on": vip_on,
             "vip_msg": vip_msg,
             "verdict": verdict,
+            "pattern": last_signal["pattern"],
+            "interval": last_signal["interval"],
+            "pa_dir": last_signal["direction"],
         },
         # ── ZONE B: MARKET FLOW ──
         "zone_b": {
@@ -463,6 +477,14 @@ async def post_alert(request: Request):
         pattern = str(body.get("pattern", "PA"))
         interval = str(body.get("interval", "M5"))
         ticker = str(body.get("ticker", "XAUUSD"))
+
+        # Update Zone A pattern display
+        if direction in ("BUY", "SELL"):
+            last_signal.update({
+                "pattern": pattern, "direction": direction,
+                "interval": interval, "price": price,
+                "updated_at": datetime.utcnow().isoformat(),
+            })
         
         try:
             conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
@@ -486,7 +508,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>💎 DIAMOND TRADER v3.1 — War Room</title>
+<title>💎 DIAMOND TRADER v3.1.1 — War Room</title>
 <style>
 :root{
   --bg: #0a0e27;
@@ -642,7 +664,7 @@ a{color:var(--cyan);text-decoration:none}
 <body>
 
 <div id="topbar">
-  <div class="brand">💎 DIAMOND TRADER v3.1</div>
+  <div class="brand">💎 DIAMOND TRADER v3.1.1</div>
   <div class="topbar-item"><div id="ws-dot" class="dot"></div><span id="ws-status">CONNECTING</span></div>
   <div class="topbar-item">PAXG <div id="price-hud"><span id="paxg-price">—</span></div></div>
   <div class="topbar-item">GRID <span id="top-grid">—</span></div>
@@ -781,15 +803,24 @@ function updateZoneA(d){
   document.getElementById('za-vip').textContent = za.vip_msg || '—';
   if(za.vip_on) document.getElementById('za-vip').className='zone-row-value on';
   else document.getElementById('za-vip').className='zone-row-value off';
-  
-  document.getElementById('za-cf').textContent = za.cf_display || '— 0/3';
+
+  // PA Pattern: ▲/▼ PatX.X [TF]
+  const patEl=document.getElementById('za-pattern');
+  if(za.pattern){
+    const arrow=za.pa_dir==='BUY'?'▲':'▼';
+    patEl.textContent=`${arrow} ${za.pattern} [${za.interval||'?'}]`;
+    patEl.style.color=za.pa_dir==='BUY'?'var(--green)':'var(--red)';
+  }
+
+  document.getElementById('za-cf').textContent = za.cf_display || '🔴 — 0/3';
   const cf_col = document.getElementById('za-cf');
   cf_col.style.color = za.cf_color==='GREEN'?'var(--green)':za.cf_color==='YELLOW'?'var(--orange)':'var(--red)';
   
   const vbox = document.getElementById('verdict-box');
   vbox.textContent = za.verdict || 'STANDBY';
   vbox.className = za.verdict&&za.verdict.includes('READY')?'ready':
-                    za.verdict&&za.verdict.includes('WAIT')?'wait':
+                    za.verdict==='WAIT'?'wait':
+                    za.verdict==='NO-TRADE'?'no-trade':
                     za.verdict&&za.verdict.includes('NEWS')?'news-block':'';
 }
 
